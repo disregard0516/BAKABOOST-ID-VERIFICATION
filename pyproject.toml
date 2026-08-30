@@ -1,0 +1,46 @@
+[project]
+name = "discord-verification-backend"
+version = "0.1.0"
+description = "Secure pre-Discord identity verification gate"
+requires-python = ">=3.12,<3.15"
+
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "sqlalchemy>=2.0,<2.1",
+    "alembic",
+    "asyncpg",
+    "pydantic>=2",
+    "pydantic-settings",
+    "python-multipart",
+    "httpx",
+    "authlib",
+    "cryptography",
+    "boto3",
+    "PyJWT[crypto]",
+    "redis[hiredis]",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "httpx",
+    "ruff",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+exclude = ["migrations*", "tests*"]
