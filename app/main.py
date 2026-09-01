@@ -16,6 +16,9 @@ from app.core.startup_security import (
 from app.middleware.origin_protection import (
     OriginProtectionMiddleware,
 )
+from app.middleware.request_context import (
+    RequestContextMiddleware,
+)
 from app.middleware.security_headers import (
     SecurityHeadersMiddleware,
 )
@@ -108,7 +111,11 @@ def create_application() -> FastAPI:
             "Authorization",
             "Content-Type",
             settings.csrf_header_name,
+            settings.admin_csrf_header_name,
             "X-Mobile-Handoff-Token",
+        ],
+        expose_headers=[
+            "X-Request-ID",
         ],
     )
 
@@ -125,6 +132,18 @@ def create_application() -> FastAPI:
     #
     application.add_middleware(
         SecurityHeadersMiddleware,
+    )
+    
+    #
+    # Generate a trusted server-side correlation ID for every
+    # HTTP request.
+    #
+    # Register this last so it is the outermost application
+    # middleware and can establish request.state.request_id
+    # before downstream middleware/routes execute.
+    #
+    application.add_middleware(
+        RequestContextMiddleware,
     )
 
     application.include_router(
