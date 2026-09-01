@@ -7,14 +7,18 @@ import type {
 
 import {
   Activity,
+  ArrowRight,
+  BadgeCheck,
   FileCheck2,
+  Fingerprint,
   LayoutDashboard,
-  LogOut,
+  LockKeyhole,
   Menu,
   Plus,
   Search,
   Settings,
   ShieldCheck,
+  Sparkles,
   Users,
   X,
 } from "lucide-react";
@@ -25,12 +29,9 @@ import {
 } from "next/navigation";
 
 import {
+  useEffect,
   useState,
 } from "react";
-
-import {
-  clearAdminToken,
-} from "@/lib/admin-api";
 
 
 interface AdminShellProps {
@@ -50,8 +51,47 @@ export function AdminShell({
   const [
     mobileOpen,
     setMobileOpen,
-  ] =
-    useState(false);
+  ] = useState(false);
+
+
+  /*
+   * This effect only synchronizes with browser APIs.
+   * It does NOT synchronously update React state.
+   */
+  useEffect(() => {
+    if (!mobileOpen) {
+      return;
+    }
+
+    function handleEscape(
+      event: KeyboardEvent,
+    ): void {
+      if (event.key === "Escape") {
+        setMobileOpen(false);
+      }
+    }
+
+    document.addEventListener(
+      "keydown",
+      handleEscape,
+    );
+
+    const previousOverflow =
+      document.body.style.overflow;
+
+    document.body.style.overflow =
+      "hidden";
+
+    return () => {
+      document.removeEventListener(
+        "keydown",
+        handleEscape,
+      );
+
+      document.body.style.overflow =
+        previousOverflow;
+    };
+  }, [mobileOpen]);
 
 
   function navigate(
@@ -59,24 +99,21 @@ export function AdminShell({
   ): void {
     setMobileOpen(false);
 
-    router.push(
-      href,
-    );
-  }
+    if (pathname === href) {
+      return;
+    }
 
-
-  function logout(): void {
-    clearAdminToken();
-
-    router.replace(
-      "/admin/login",
-    );
+    router.push(href);
   }
 
 
   const overviewActive =
-    pathname ===
-    "/admin";
+    pathname === "/admin";
+
+  const createRequestActive =
+    pathname.startsWith(
+      "/admin/verification-requests/new",
+    );
 
   const queueActive =
     pathname ===
@@ -85,45 +122,100 @@ export function AdminShell({
       pathname.startsWith(
         "/admin/verification-requests/",
       ) &&
-      !pathname.startsWith(
-        "/admin/verification-requests/new",
-      )
-    );
-
-  const createRequestActive =
-    pathname.startsWith(
-      "/admin/verification-requests/new",
+      !createRequestActive
     );
 
 
   return (
     <div
       className="
-        admin-surface
+        relative
         min-h-screen
-        bg-[#090f18]
+        overflow-x-hidden
+        bg-[#080d15]
         text-white
       "
     >
+      {/* Background decoration */}
+
+      <div
+        aria-hidden="true"
+        className="
+          pointer-events-none
+          fixed
+          inset-0
+          overflow-hidden
+        "
+      >
+        <div
+          className="
+            absolute
+            -left-64
+            -top-64
+            h-[620px]
+            w-[620px]
+            rounded-full
+            bg-violet-500/[0.07]
+            blur-[140px]
+          "
+        />
+
+        <div
+          className="
+            absolute
+            -right-64
+            top-[20%]
+            h-[520px]
+            w-[520px]
+            rounded-full
+            bg-indigo-500/[0.05]
+            blur-[150px]
+          "
+        />
+
+        <div
+          className="
+            absolute
+            bottom-[-280px]
+            left-[35%]
+            h-[500px]
+            w-[500px]
+            rounded-full
+            bg-violet-400/[0.025]
+            blur-[150px]
+          "
+        />
+      </div>
+
+
+      {/* =====================================================
+          DESKTOP SIDEBAR
+      ====================================================== */}
+
       <aside
         className="
           fixed
           inset-y-0
           left-0
-          z-40
+          z-50
           hidden
-          w-[260px]
+          w-[268px]
+          flex-col
           border-r
           border-white/[0.06]
-          bg-[#09111b]/95
-          backdrop-blur-xl
-          lg:block
+          bg-[#0a101a]/95
+          shadow-[20px_0_80px_rgba(0,0,0,0.15)]
+          backdrop-blur-2xl
+          lg:flex
         "
       >
+        {/* Brand */}
+
         <div
           className="
             flex
-            h-[76px]
+            h-[82px]
+            shrink-0
             items-center
             border-b
             border-white/[0.06]
@@ -133,70 +225,101 @@ export function AdminShell({
           <button
             type="button"
             onClick={() => {
-              navigate(
-                "/admin",
-              );
+              navigate("/admin");
             }}
             className="
               group
               flex
               items-center
               gap-3
+              rounded-2xl
               text-left
+              outline-none
+              transition
+              duration-200
+              focus-visible:ring-2
+              focus-visible:ring-violet-500/40
             "
           >
             <div
               className="
+                relative
                 flex
-                size-10
+                h-[42px]
+                w-[42px]
+                shrink-0
                 items-center
                 justify-center
+                overflow-hidden
                 rounded-[14px]
-                bg-[linear-gradient(145deg,#7967ff,#5544df)]
-                shadow-[0_12px_32px_rgba(92,73,226,0.28)]
+                border
+                border-violet-300/10
+                bg-violet-600
+                text-white
+                shadow-[0_12px_34px_rgba(109,78,230,0.28)]
                 transition
+                duration-300
+                group-hover:-translate-y-0.5
                 group-hover:scale-[1.03]
               "
             >
-              <ShieldCheck
-                className="size-5"
+              <Fingerprint
+                className="h-5 w-5"
+                strokeWidth={2}
                 aria-hidden="true"
+              />
+
+              <span
+                aria-hidden="true"
+                className="
+                  absolute
+                  inset-x-2
+                  top-0
+                  h-px
+                  bg-white/40
+                "
               />
             </div>
 
-            <div>
+
+            <div className="min-w-0">
               <div
                 className="
-                  text-sm
-                  font-bold
+                  truncate
+                  text-[13px]
+                  font-extrabold
                   tracking-[-0.025em]
                   text-white
                 "
               >
-                Verification Ops
+                BAKABOOST
               </div>
 
               <div
                 className="
                   mt-0.5
+                  truncate
                   text-[8px]
                   font-bold
                   uppercase
-                  tracking-[0.13em]
+                  tracking-[0.15em]
                   text-slate-600
                 "
               >
-                Secure review console
+                Verification administration
               </div>
             </div>
           </button>
         </div>
 
 
+        {/* Navigation */}
+
         <nav
           className="
             flex
-            h-[calc(100%-76px)]
+            min-h-0
+            flex-1
             flex-col
             px-3
             py-5
@@ -204,32 +327,24 @@ export function AdminShell({
           aria-label="Administrator navigation"
         >
           <NavSectionLabel>
-            Operations
+            Verification
           </NavSectionLabel>
 
           <AdminNavItem
-            icon={
-              LayoutDashboard
-            }
+            icon={LayoutDashboard}
             label="Overview"
-            active={
-              overviewActive
-            }
+            description="Workspace summary"
+            active={overviewActive}
             onClick={() => {
-              navigate(
-                "/admin",
-              );
+              navigate("/admin");
             }}
           />
 
           <AdminNavItem
-            icon={
-              FileCheck2
-            }
+            icon={FileCheck2}
             label="Verification Queue"
-            active={
-              queueActive
-            }
+            description="Review submitted cases"
+            active={queueActive}
             onClick={() => {
               navigate(
                 "/admin/verification-queue",
@@ -238,13 +353,10 @@ export function AdminShell({
           />
 
           <AdminNavItem
-            icon={
-              Plus
-            }
+            icon={Plus}
             label="Create Request"
-            active={
-              createRequestActive
-            }
+            description="Issue a private link"
+            active={createRequestActive}
             onClick={() => {
               navigate(
                 "/admin/verification-requests/new",
@@ -255,9 +367,10 @@ export function AdminShell({
 
           <div
             className="
-              my-4
+              mx-2
+              my-5
               h-px
-              bg-white/[0.06]
+              bg-white/[0.055]
             "
           />
 
@@ -267,76 +380,92 @@ export function AdminShell({
           </NavSectionLabel>
 
           <AdminNavItem
-            icon={
-              Users
-            }
+            icon={Users}
             label="Reviewers"
+            description="Reviewer management"
             disabled
           />
 
           <AdminNavItem
-            icon={
-              Activity
-            }
+            icon={Activity}
             label="Audit Activity"
+            description="Security activity"
             disabled
           />
 
           <AdminNavItem
-            icon={
-              Settings
-            }
+            icon={Settings}
             label="Settings"
+            description="Workspace settings"
             disabled
           />
 
 
-          <div
-            className="
-              mt-auto
-              pt-5
-            "
-          >
+          {/* Session */}
+
+          <div className="mt-auto pt-5">
             <div
               className="
                 mb-3
-                rounded-[16px]
+                rounded-[18px]
                 border
                 border-white/[0.06]
                 bg-white/[0.025]
                 p-3
+                shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]
               "
             >
               <div
                 className="
                   flex
                   items-center
-                  gap-2.5
+                  gap-3
                 "
               >
                 <div
                   className="
+                    relative
                     flex
-                    size-9
+                    h-10
+                    w-10
                     shrink-0
                     items-center
                     justify-center
-                    rounded-[11px]
+                    rounded-[13px]
+                    border
+                    border-violet-400/10
                     bg-violet-500/10
                     text-[9px]
-                    font-bold
+                    font-extrabold
+                    tracking-[0.04em]
                     text-violet-300
                   "
                 >
                   AD
+
+                  <span
+                    aria-hidden="true"
+                    className="
+                      absolute
+                      -bottom-0.5
+                      -right-0.5
+                      h-2.5
+                      w-2.5
+                      rounded-full
+                      border-2
+                      border-[#0d1420]
+                      bg-emerald-500
+                    "
+                  />
                 </div>
 
-                <div className="min-w-0">
+
+                <div className="min-w-0 flex-1">
                   <div
                     className="
                       truncate
                       text-[10px]
-                      font-semibold
+                      font-bold
                       text-slate-300
                     "
                   >
@@ -345,69 +474,106 @@ export function AdminShell({
 
                   <div
                     className="
-                      mt-0.5
+                      mt-1
                       flex
                       items-center
                       gap-1.5
                       text-[8px]
+                      font-medium
                       text-slate-600
                     "
                   >
-                    <span
-                      className="
-                        size-1.5
-                        rounded-full
-                        bg-emerald-500
-                      "
+                    <ShieldCheck
+                      className="h-3 w-3"
+                      aria-hidden="true"
                     />
 
                     Protected session
                   </div>
                 </div>
+
+
+                <BadgeCheck
+                  className="
+                    h-4
+                    w-4
+                    shrink-0
+                    text-emerald-500
+                  "
+                  aria-hidden="true"
+                />
               </div>
             </div>
 
 
-            <button
-              type="button"
-              onClick={
-                logout
-              }
+            <a
+              href="/auth/logout"
               className="
+                group
                 flex
                 min-h-11
                 w-full
                 items-center
                 gap-3
-                rounded-xl
+                rounded-[13px]
                 px-3
                 py-2.5
                 text-xs
                 font-semibold
                 text-slate-500
+                outline-none
                 transition
-                hover:bg-white/[0.05]
-                hover:text-white
+                duration-200
+                hover:bg-white/[0.045]
+                hover:text-slate-200
+                focus-visible:ring-2
+                focus-visible:ring-violet-500/30
               "
             >
-              <LogOut
-                className="size-4"
+              <LockKeyhole
+                className="
+                  h-4
+                  w-4
+                  transition
+                  duration-200
+                  group-hover:scale-105
+                "
                 aria-hidden="true"
               />
 
-              End admin session
-            </button>
+              <span>
+                End admin session
+              </span>
+
+              <ArrowRight
+                className="
+                  ml-auto
+                  h-3.5
+                  w-3.5
+                  opacity-40
+                  transition
+                  duration-200
+                  group-hover:translate-x-0.5
+                  group-hover:opacity-100
+                "
+                aria-hidden="true"
+              />
+            </a>
           </div>
         </nav>
       </aside>
 
 
-      {mobileOpen && (
+      {/* =====================================================
+          MOBILE DRAWER
+      ====================================================== */}
+
+      {mobileOpen ? (
         <div
           className="
             fixed
             inset-0
-            z-[80]
+            z-[100]
             lg:hidden
           "
         >
@@ -415,17 +581,18 @@ export function AdminShell({
             type="button"
             aria-label="Close navigation"
             onClick={() => {
-              setMobileOpen(
-                false,
-              );
+              setMobileOpen(false);
             }}
             className="
               absolute
               inset-0
               bg-black/75
               backdrop-blur-sm
+              transition-opacity
+              duration-200
             "
           />
+
 
           <aside
             className="
@@ -433,13 +600,14 @@ export function AdminShell({
               z-10
               flex
               h-full
-              w-[292px]
+              w-[300px]
+              max-w-[86vw]
               flex-col
               border-r
               border-white/[0.07]
-              bg-[#09111b]
+              bg-[#0a101a]
               p-4
-              shadow-[25px_0_80px_rgba(0,0,0,0.4)]
+              shadow-[30px_0_100px_rgba(0,0,0,0.45)]
             "
           >
             <div
@@ -452,9 +620,7 @@ export function AdminShell({
               <button
                 type="button"
                 onClick={() => {
-                  navigate(
-                    "/admin",
-                  );
+                  navigate("/admin");
                 }}
                 className="
                   flex
@@ -466,42 +632,46 @@ export function AdminShell({
                 <div
                   className="
                     flex
-                    size-9
+                    h-10
+                    w-10
                     items-center
                     justify-center
-                    rounded-[12px]
-                    bg-violet-500
+                    rounded-[13px]
+                    bg-violet-600
                     text-white
+                    shadow-[0_10px_30px_rgba(95,72,230,0.25)]
                   "
                 >
-                  <ShieldCheck
-                    className="size-4"
+                  <Fingerprint
+                    className="h-5 w-5"
                     aria-hidden="true"
                   />
                 </div>
+
 
                 <div>
                   <div
                     className="
                       text-xs
-                      font-bold
+                      font-extrabold
+                      tracking-[-0.02em]
                       text-white
                     "
                   >
-                    Verification Ops
+                    BAKABOOST
                   </div>
 
                   <div
                     className="
                       mt-0.5
-                      text-[8px]
+                      text-[7px]
                       font-bold
                       uppercase
-                      tracking-[0.1em]
+                      tracking-[0.14em]
                       text-slate-600
                     "
                   >
-                    Admin console
+                    Admin workspace
                   </div>
                 </div>
               </button>
@@ -511,24 +681,27 @@ export function AdminShell({
                 type="button"
                 aria-label="Close navigation"
                 onClick={() => {
-                  setMobileOpen(
-                    false,
-                  );
+                  setMobileOpen(false);
                 }}
                 className="
                   flex
-                  size-10
+                  h-10
+                  w-10
                   items-center
                   justify-center
-                  rounded-xl
+                  rounded-[12px]
+                  border
+                  border-white/[0.06]
+                  bg-white/[0.025]
                   text-slate-500
                   transition
-                  hover:bg-white/[0.05]
+                  duration-200
+                  hover:bg-white/[0.06]
                   hover:text-white
                 "
               >
                 <X
-                  className="size-4"
+                  className="h-4 w-4"
                   aria-hidden="true"
                 />
               </button>
@@ -537,33 +710,23 @@ export function AdminShell({
 
             <div
               className="
-                mt-7
-                space-y-1
+                mt-8
+                space-y-1.5
               "
             >
               <MobileAdminLink
-                icon={
-                  LayoutDashboard
-                }
+                icon={LayoutDashboard}
                 label="Overview"
-                active={
-                  overviewActive
-                }
+                active={overviewActive}
                 onClick={() => {
-                  navigate(
-                    "/admin",
-                  );
+                  navigate("/admin");
                 }}
               />
 
               <MobileAdminLink
-                icon={
-                  FileCheck2
-                }
+                icon={FileCheck2}
                 label="Verification Queue"
-                active={
-                  queueActive
-                }
+                active={queueActive}
                 onClick={() => {
                   navigate(
                     "/admin/verification-queue",
@@ -572,13 +735,9 @@ export function AdminShell({
               />
 
               <MobileAdminLink
-                icon={
-                  Plus
-                }
+                icon={Plus}
                 label="Create Request"
-                active={
-                  createRequestActive
-                }
+                active={createRequestActive}
                 onClick={() => {
                   navigate(
                     "/admin/verification-requests/new",
@@ -596,62 +755,136 @@ export function AdminShell({
                 pt-4
               "
             >
-              <button
-                type="button"
-                onClick={
-                  logout
-                }
+              <div
+                className="
+                  mb-3
+                  flex
+                  items-center
+                  gap-3
+                  rounded-[15px]
+                  border
+                  border-white/[0.055]
+                  bg-white/[0.025]
+                  p-3
+                "
+              >
+                <div
+                  className="
+                    flex
+                    h-9
+                    w-9
+                    items-center
+                    justify-center
+                    rounded-[11px]
+                    bg-violet-500/10
+                    text-[9px]
+                    font-bold
+                    text-violet-300
+                  "
+                >
+                  AD
+                </div>
+
+                <div>
+                  <div
+                    className="
+                      text-[10px]
+                      font-semibold
+                      text-slate-300
+                    "
+                  >
+                    Administrator
+                  </div>
+
+                  <div
+                    className="
+                      mt-0.5
+                      flex
+                      items-center
+                      gap-1.5
+                      text-[8px]
+                      text-emerald-500
+                    "
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="
+                        h-1.5
+                        w-1.5
+                        rounded-full
+                        bg-emerald-500
+                      "
+                    />
+
+                    Authenticated
+                  </div>
+                </div>
+              </div>
+
+
+              <a
+                href="/auth/logout"
                 className="
                   flex
                   min-h-11
                   w-full
                   items-center
                   gap-3
-                  rounded-xl
+                  rounded-[13px]
                   px-3
                   py-3
                   text-xs
                   font-semibold
                   text-slate-500
                   transition
+                  duration-200
                   hover:bg-white/[0.05]
                   hover:text-white
                 "
               >
-                <LogOut
-                  className="size-4"
+                <LockKeyhole
+                  className="h-4 w-4"
                   aria-hidden="true"
                 />
 
                 End admin session
-              </button>
+              </a>
             </div>
           </aside>
         </div>
-      )}
+      ) : null}
 
+
+      {/* =====================================================
+          MAIN CONTENT
+      ====================================================== */}
 
       <div
         className="
+          relative
+          z-10
           min-h-screen
-          lg:pl-[260px]
+          lg:pl-[268px]
         "
       >
+        {/* Header */}
+
         <header
           className="
             sticky
             top-0
-            z-30
+            z-40
             flex
-            h-[76px]
+            h-[82px]
             items-center
             justify-between
             border-b
-            border-white/[0.06]
-            bg-[#0d1520]/85
+            border-white/[0.055]
+            bg-[#0b121c]/90
             px-4
-            backdrop-blur-xl
-            sm:px-7
+            backdrop-blur-2xl
+            sm:px-6
+            xl:px-8
           "
         >
           <div
@@ -665,30 +898,31 @@ export function AdminShell({
               type="button"
               aria-label="Open navigation"
               onClick={() => {
-                setMobileOpen(
-                  true,
-                );
+                setMobileOpen(true);
               }}
               className="
                 mr-3
                 flex
-                size-10
+                h-10
+                w-10
                 shrink-0
                 items-center
                 justify-center
-                rounded-xl
+                rounded-[12px]
                 border
                 border-white/[0.07]
-                bg-white/[0.03]
+                bg-white/[0.025]
                 text-slate-400
                 transition
-                hover:bg-white/[0.06]
+                duration-200
+                hover:border-white/[0.12]
+                hover:bg-white/[0.055]
                 hover:text-white
                 lg:hidden
               "
             >
               <Menu
-                className="size-4"
+                className="h-4 w-4"
                 aria-hidden="true"
               />
             </button>
@@ -697,28 +931,40 @@ export function AdminShell({
             <div className="min-w-0">
               <div
                 className="
-                  truncate
-                  text-[9px]
-                  font-semibold
+                  flex
+                  items-center
+                  gap-2
+                  text-[8px]
+                  font-bold
                   uppercase
-                  tracking-[0.08em]
+                  tracking-[0.13em]
                   text-slate-600
                 "
               >
-                Administrator workspace
+                <Sparkles
+                  className="
+                    h-3
+                    w-3
+                    text-violet-400
+                  "
+                  aria-hidden="true"
+                />
+
+                BAKABOOST administration
               </div>
 
               <div
                 className="
-                  mt-0.5
+                  mt-1
                   truncate
-                  text-xs
+                  text-[13px]
                   font-bold
-                  text-slate-200
+                  tracking-[-0.02em]
+                  text-slate-100
                   sm:text-sm
                 "
               >
-                Manual Verification Review
+                {getWorkspaceTitle(pathname)}
               </div>
             </div>
           </div>
@@ -734,29 +980,40 @@ export function AdminShell({
           >
             <button
               type="button"
-              aria-label="Open verification search"
+              aria-label="Open verification queue"
               onClick={() => {
                 navigate(
                   "/admin/verification-queue",
                 );
               }}
               className="
+                group
                 flex
-                size-10
+                h-10
+                w-10
                 items-center
                 justify-center
-                rounded-xl
+                rounded-[12px]
                 border
                 border-white/[0.07]
-                bg-white/[0.03]
-                text-slate-400
+                bg-white/[0.025]
+                text-slate-500
                 transition
-                hover:bg-white/[0.07]
+                duration-200
+                hover:-translate-y-px
+                hover:border-white/[0.11]
+                hover:bg-white/[0.055]
                 hover:text-white
               "
             >
               <Search
-                className="size-4"
+                className="
+                  h-4
+                  w-4
+                  transition
+                  duration-200
+                  group-hover:scale-105
+                "
                 aria-hidden="true"
               />
             </button>
@@ -768,7 +1025,7 @@ export function AdminShell({
                 hidden
                 items-center
                 gap-3
-                rounded-[13px]
+                rounded-[14px]
                 border
                 border-white/[0.06]
                 bg-white/[0.025]
@@ -780,19 +1037,37 @@ export function AdminShell({
             >
               <div
                 className="
+                  relative
                   flex
-                  size-8
+                  h-8
+                  w-8
                   items-center
                   justify-center
                   rounded-[10px]
-                  bg-violet-500/15
-                  text-[9px]
-                  font-bold
+                  bg-violet-500/10
+                  text-[8px]
+                  font-extrabold
                   text-violet-300
                 "
               >
                 AD
+
+                <span
+                  aria-hidden="true"
+                  className="
+                    absolute
+                    -bottom-px
+                    -right-px
+                    h-2
+                    w-2
+                    rounded-full
+                    border-2
+                    border-[#0d1520]
+                    bg-emerald-500
+                  "
+                />
               </div>
+
 
               <div>
                 <div
@@ -818,15 +1093,15 @@ export function AdminShell({
                     text-emerald-500
                   "
                 >
-                  <span
+                  <ShieldCheck
                     className="
-                      size-1
-                      rounded-full
-                      bg-emerald-500
+                      h-2.5
+                      w-2.5
                     "
+                    aria-hidden="true"
                   />
 
-                  Authenticated
+                  Secure session
                 </div>
               </div>
             </div>
@@ -834,11 +1109,17 @@ export function AdminShell({
         </header>
 
 
+        {/* Page */}
+
         <main
           className="
+            relative
             mx-auto
+            w-full
             max-w-[1600px]
             p-4
+            transition-opacity
+            duration-300
             sm:p-6
             xl:p-8
           "
@@ -851,6 +1132,31 @@ export function AdminShell({
 }
 
 
+function getWorkspaceTitle(
+  pathname: string,
+): string {
+  if (
+    pathname.startsWith(
+      "/admin/verification-requests/new",
+    )
+  ) {
+    return "Create Verification Request";
+  }
+
+  if (
+    pathname ===
+      "/admin/verification-queue" ||
+    pathname.startsWith(
+      "/admin/verification-requests/",
+    )
+  ) {
+    return "Manual Verification Review";
+  }
+
+  return "Verification Operations";
+}
+
+
 function NavSectionLabel({
   children,
 }: {
@@ -860,11 +1166,11 @@ function NavSectionLabel({
     <div
       className="
         px-3
-        pb-2
-        text-[8px]
-        font-bold
+        pb-2.5
+        text-[7px]
+        font-extrabold
         uppercase
-        tracking-[0.12em]
+        tracking-[0.16em]
         text-slate-700
       "
     >
@@ -877,85 +1183,196 @@ function NavSectionLabel({
 function AdminNavItem({
   icon: Icon,
   label,
+  description,
   active = false,
   disabled = false,
   onClick,
 }: {
   icon: ElementType;
   label: string;
+  description?: string;
   active?: boolean;
   disabled?: boolean;
   onClick?: () => void;
 }) {
+  const stateClasses =
+    disabled
+      ? `
+          cursor-not-allowed
+          border-transparent
+          opacity-40
+        `
+      : active
+        ? `
+            border-violet-400/[0.08]
+            bg-violet-500/[0.10]
+            text-violet-100
+            shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]
+          `
+        : `
+            border-transparent
+            text-slate-500
+            hover:translate-x-0.5
+            hover:border-white/[0.04]
+            hover:bg-white/[0.035]
+            hover:text-slate-200
+          `;
+
+
   return (
     <button
       type="button"
-      disabled={
-        disabled
-      }
-      onClick={
-        onClick
-      }
+      disabled={disabled}
+      onClick={onClick}
       className={`
+        group
+        relative
         mb-1
         flex
-        min-h-11
+        min-h-[52px]
         w-full
         items-center
         gap-3
-        rounded-xl
+        overflow-hidden
+        rounded-[14px]
+        border
         px-3
         py-2.5
         text-left
-        text-xs
-        font-semibold
+        outline-none
         transition
-        ${
-          disabled
-            ? `
-                cursor-not-allowed
-                text-slate-800
-              `
-            : active
-              ? `
-                  bg-violet-500/10
-                  text-violet-200
-                  shadow-[inset_0_0_0_1px_rgba(139,113,255,0.08)]
-                `
-              : `
-                  text-slate-500
-                  hover:bg-white/[0.04]
-                  hover:text-slate-200
-                `
-        }
+        duration-200
+        focus-visible:ring-2
+        focus-visible:ring-violet-500/30
+        ${stateClasses}
       `}
     >
-      <Icon
-        className="size-4"
-        aria-hidden="true"
-      />
+      {active ? (
+        <span
+          aria-hidden="true"
+          className="
+            absolute
+            left-0
+            top-1/2
+            h-6
+            w-0.5
+            -translate-y-1/2
+            rounded-r-full
+            bg-violet-400
+          "
+        />
+      ) : null}
 
-      <span className="flex-1">
-        {label}
-      </span>
 
-      {disabled && (
+      <div
+        className={`
+          flex
+          h-8
+          w-8
+          shrink-0
+          items-center
+          justify-center
+          rounded-[10px]
+          transition
+          duration-200
+          ${
+            active
+              ? `
+                  bg-violet-500/15
+                  text-violet-300
+                `
+              : `
+                  bg-white/[0.02]
+                  text-slate-600
+                  group-hover:bg-white/[0.04]
+                  group-hover:text-slate-300
+                `
+          }
+        `}
+      >
+        <Icon
+          className="h-[15px] w-[15px]"
+          strokeWidth={1.9}
+          aria-hidden="true"
+        />
+      </div>
+
+
+      <div className="min-w-0 flex-1">
+        <div
+          className={`
+            truncate
+            text-[10px]
+            font-bold
+            ${
+              active
+                ? "text-violet-100"
+                : "text-inherit"
+            }
+          `}
+        >
+          {label}
+        </div>
+
+        {description ? (
+          <div
+            className="
+              mt-0.5
+              truncate
+              text-[8px]
+              font-medium
+              text-slate-700
+            "
+          >
+            {description}
+          </div>
+        ) : null}
+      </div>
+
+
+      {disabled ? (
         <span
           className="
             rounded-full
             border
             border-white/[0.05]
+            bg-white/[0.015]
             px-1.5
             py-0.5
             text-[6px]
             font-bold
             uppercase
             tracking-[0.08em]
-            text-slate-800
+            text-slate-700
           "
         >
           Later
         </span>
+      ) : (
+        <ArrowRight
+          className={`
+            h-3
+            w-3
+            shrink-0
+            transition
+            duration-200
+            ${
+              active
+                ? `
+                    text-violet-400
+                    opacity-100
+                  `
+                : `
+                    -translate-x-1
+                    text-slate-600
+                    opacity-0
+                    group-hover:translate-x-0
+                    group-hover:opacity-100
+                  `
+            }
+          `}
+          aria-hidden="true"
+        />
       )}
     </button>
   );
@@ -976,42 +1393,94 @@ function MobileAdminLink({
   return (
     <button
       type="button"
-      onClick={
-        onClick
-      }
+      onClick={onClick}
       className={`
+        group
         flex
-        min-h-11
+        min-h-[48px]
         w-full
         items-center
         gap-3
-        rounded-xl
+        rounded-[13px]
+        border
         px-3
         py-3
         text-left
         text-xs
         font-semibold
         transition
+        duration-200
         ${
           active
             ? `
-                bg-violet-500/10
+                border-violet-400/[0.08]
+                bg-violet-500/[0.10]
                 text-violet-200
               `
             : `
-                text-slate-400
-                hover:bg-white/[0.05]
+                border-transparent
+                text-slate-500
+                hover:border-white/[0.05]
+                hover:bg-white/[0.04]
                 hover:text-white
               `
         }
       `}
     >
-      <Icon
-        className="size-4"
+      <div
+        className={`
+          flex
+          h-8
+          w-8
+          items-center
+          justify-center
+          rounded-[10px]
+          ${
+            active
+              ? `
+                  bg-violet-500/15
+                  text-violet-300
+                `
+              : `
+                  bg-white/[0.025]
+                  text-slate-600
+                `
+          }
+        `}
+      >
+        <Icon
+          className="h-4 w-4"
+          aria-hidden="true"
+        />
+      </div>
+
+      <span className="flex-1">
+        {label}
+      </span>
+
+      <ArrowRight
+        className={`
+          h-3.5
+          w-3.5
+          transition
+          duration-200
+          ${
+            active
+              ? `
+                  text-violet-400
+                  opacity-100
+                `
+              : `
+                  -translate-x-1
+                  text-slate-600
+                  opacity-0
+                  group-hover:translate-x-0
+                  group-hover:opacity-100
+                `
+          }
+        `}
         aria-hidden="true"
       />
-
-      {label}
     </button>
   );
 }

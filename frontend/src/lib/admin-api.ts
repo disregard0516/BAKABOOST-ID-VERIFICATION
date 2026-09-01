@@ -30,15 +30,34 @@ import type {
   ReviewerListResponse,
 } from "@/types/reviewer";
 
-const ADMIN_TOKEN_STORAGE_KEY =
-  "admin_access_token";
+
+/* ============================================================
+   CONFIGURATION
+============================================================ */
+
+const DEFAULT_API_BASE_URL =
+  "http://localhost:8000/api";
+
+const AUTH0_ACCESS_TOKEN_ENDPOINT =
+  "/auth/access-token";
+
+const ADMIN_SESSION_PATH =
+  "/admin/auth/session";
+
+const ADMIN_CSRF_HEADER =
+  "X-Admin-CSRF-Token";
+
 
 export const ADMIN_SESSION_EXPIRED_EVENT =
   "admin-session-expired";
 
 
+/* ============================================================
+   ERRORS
+============================================================ */
+
 export class AdminApiError extends Error {
-  status: number;
+  readonly status: number;
 
   constructor(
     message: string,
@@ -46,69 +65,86 @@ export class AdminApiError extends Error {
   ) {
     super(message);
 
-    this.name =
-      "AdminApiError";
+    this.name = "AdminApiError";
+    this.status = status;
 
-    this.status =
-      status;
+    Object.setPrototypeOf(
+      this,
+      AdminApiError.prototype,
+    );
   }
 }
 
 
-export function getAdminToken(): string | null {
-  if (
-    typeof window ===
-    "undefined"
-  ) {
-    return null;
-  }
+/* ============================================================
+   AUTH0 TYPES
+============================================================ */
 
-  return window.sessionStorage.getItem(
-    ADMIN_TOKEN_STORAGE_KEY,
-  );
+interface Auth0AccessTokenResponse {
+  token?: unknown;
+  accessToken?: unknown;
+  access_token?: unknown;
+
+  expires_at?: unknown;
+  expires_in?: unknown;
+
+  token_type?: unknown;
+  scope?: unknown;
 }
 
 
-export function setAdminToken(
-  token: string,
-): void {
-  if (
-    typeof window ===
-    "undefined"
-  ) {
-    return;
-  }
+/* ============================================================
+   ADMIN SESSION TYPES
+============================================================ */
 
-  window.sessionStorage.setItem(
-    ADMIN_TOKEN_STORAGE_KEY,
-    token,
-  );
+interface AdminSessionResponse {
+  authenticated?: unknown;
+  admin?: unknown;
+  expires_at?: unknown;
+  csrf_token?: unknown;
 }
 
 
-export function clearAdminToken(): void {
-  if (
-    typeof window ===
-    "undefined"
-  ) {
-    return;
-  }
+/* ============================================================
+   GENERIC API ERROR TYPES
+============================================================ */
 
-  window.sessionStorage.removeItem(
-    ADMIN_TOKEN_STORAGE_KEY,
-  );
+interface ApiErrorResponse {
+  detail?: unknown;
+  message?: unknown;
+  error?: unknown;
 }
 
+
+/* ============================================================
+   IN-MEMORY SESSION STATE
+============================================================ */
+
+/*
+ * This is NOT the administrator session secret.
+ *
+ * The real session credential remains in an HttpOnly cookie
+ * controlled by FastAPI and cannot be read by this code.
+ *
+ * Only the CSRF credential is retained in JavaScript memory.
+ */
+let adminCsrfToken: string | null = null;
+
+/*
+ * Deduplicate simultaneous session initialization requests.
+ */
+let adminSessionInitialization:
+  Promise<void> | null = null;
+
+
+/* ============================================================
+   SESSION EVENTS
+============================================================ */
 
 function signalAdminSessionExpired(): void {
-  if (
-    typeof window ===
-    "undefined"
-  ) {
+  if (typeof window === "undefined") {
     return;
   }
-
-  clearAdminToken();
 
   window.dispatchEvent(
     new CustomEvent(
@@ -118,31 +154,520 @@ function signalAdminSessionExpired(): void {
 }
 
 
+function clearAdminSessionState(): void {
+  adminCsrfToken = null;
+  adminSessionInitialization = null;
+}
+
+
+/* ============================================================
+   URL HELPERS
+============================================================ */
+
+function getApiBaseUrl(): string {
+  const configured =
+    process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+
+  const baseUrl =
+    configured || DEFAULT_API_BASE_URL;
+
+  return baseUrl.replace(/\/+$/, "");
+}
+
+
+function normalizeApiPath(
+  path: string,
+): string {
+  if (!path) {
+    return "/";
+  }
+
+  return path.startsWith("/")
+    ? path
+    : `/${path}`;
+}
+
+
+function getApiUrl(
+  path: string,
+): string {
+  return (
+    `${getApiBaseUrl()}${normalizeApiPath(path)}`
+  );
+}
+
+
+/* ============================================================
+   RESPONSE HELPERS
+============================================================ */
+
+function extractAccessToken(
+  payload: Auth0AccessTokenResponse,
+): string | null {
+  const possibleTokens = [
+    payload.token,
+    payload.accessToken,
+    payload.access_token,
+  ];
+
+  for (const value of possibleTokens) {
+    if (
+      typeof value === "string" &&
+      value.trim().length > 0
+    ) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+
+function extractCsrfToken(
+  payload: AdminSessionResponse,
+): string | null {
+  if (
+    typeof payload.csrf_token === "string" &&
+    payload.csrf_token.trim().length > 0
+  ) {
+    return payload.csrf_token.trim();
+  }
+
+  return null;
+}
+
+
+function extractErrorMessage(
+  payload: ApiErrorResponse,
+): string | null {
+  const possibleMessages = [
+    payload.detail,
+    payload.message,
+    payload.error,
+  ];
+
+  for (const value of possibleMessages) {
+    if (
+      typeof value === "string" &&
+      value.trim().length > 0
+    ) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+
+async function getResponseErrorMessage(
+  response: Response,
+  fallback: string,
+): Promise<string> {
+  try {
+    const payload =
+      (await response.json()) as
+        ApiErrorResponse;
+
+    return (
+      extractErrorMessage(payload) ??
+      fallback
+    );
+  } catch {
+    return fallback;
+  }
+}
+
+
+/* ============================================================
+   AUTH0 ACCESS TOKEN
+============================================================ */
+
+async function getAdminAccessToken():
+  Promise<string> {
+  let response: Response;
+
+  try {
+    response = await fetch(
+      AUTH0_ACCESS_TOKEN_ENDPOINT,
+      {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+
+        headers: {
+          Accept: "application/json",
+        },
+      },
+    );
+  } catch {
+    throw new AdminApiError(
+      "Unable to reach the administrator authentication service.",
+      0,
+    );
+  }
+
+  if (!response.ok) {
+    if (
+      response.status === 401 ||
+      response.status === 403
+    ) {
+      clearAdminSessionState();
+      signalAdminSessionExpired();
+    }
+
+    throw new AdminApiError(
+      response.status === 401
+        ? "Administrator sign-in has expired. Please sign in again."
+        : response.status === 403
+          ? "Administrator authentication is not authorized."
+          : "Unable to verify administrator authentication.",
+      response.status,
+    );
+  }
+
+  let payload: Auth0AccessTokenResponse;
+
+  try {
+    payload =
+      (await response.json()) as
+        Auth0AccessTokenResponse;
+  } catch {
+    throw new AdminApiError(
+      "Authentication service returned an invalid response.",
+      500,
+    );
+  }
+
+  const token =
+    extractAccessToken(payload);
+
+  if (!token) {
+    clearAdminSessionState();
+    signalAdminSessionExpired();
+
+    throw new AdminApiError(
+      "Administrator authentication could not be verified. Please sign in again.",
+      401,
+    );
+  }
+
+  return token;
+}
+
+
+/* ============================================================
+   EXISTING BAKABOOST SESSION
+============================================================ */
+
+async function restoreAdminSession():
+  Promise<boolean> {
+  let response: Response;
+
+  try {
+    response = await fetch(
+      getApiUrl(
+        ADMIN_SESSION_PATH,
+      ),
+      {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+
+        headers: {
+          Accept: "application/json",
+        },
+      },
+    );
+  } catch {
+    throw new AdminApiError(
+      "Unable to reach the BAKABOOST administrator API.",
+      0,
+    );
+  }
+
+  /*
+   * 401 here is normal when this browser has an Auth0
+   * session but has not yet exchanged it for a BAKABOOST
+   * server-managed session.
+   */
+  if (response.status === 401) {
+    return false;
+  }
+
+  if (!response.ok) {
+    const message =
+      await getResponseErrorMessage(
+        response,
+        "Unable to restore administrator session.",
+      );
+
+    throw new AdminApiError(
+      message,
+      response.status,
+    );
+  }
+
+  let payload: AdminSessionResponse;
+
+  try {
+    payload =
+      (await response.json()) as
+        AdminSessionResponse;
+  } catch {
+    throw new AdminApiError(
+      "Administrator session service returned an invalid response.",
+      500,
+    );
+  }
+
+  const csrfToken =
+    extractCsrfToken(payload);
+
+  if (!csrfToken) {
+    throw new AdminApiError(
+      "Administrator request verification could not be initialized.",
+      500,
+    );
+  }
+
+  adminCsrfToken = csrfToken;
+
+  return true;
+}
+
+
+/* ============================================================
+   CREATE BAKABOOST SESSION
+============================================================ */
+
+async function establishAdminSession():
+  Promise<void> {
+  /*
+   * The Auth0 credential is used only for this exchange.
+   *
+   * It is not placed in localStorage/sessionStorage and is not
+   * attached to normal administrator API requests.
+   */
+  const accessToken =
+    await getAdminAccessToken();
+
+  let response: Response;
+
+  try {
+    response = await fetch(
+      getApiUrl(
+        ADMIN_SESSION_PATH,
+      ),
+      {
+        method: "POST",
+
+        credentials: "include",
+        cache: "no-store",
+
+        headers: {
+          Accept: "application/json",
+
+          Authorization:
+            `Bearer ${accessToken}`,
+        },
+      },
+    );
+  } catch {
+    throw new AdminApiError(
+      "Unable to establish the BAKABOOST administrator session.",
+      0,
+    );
+  }
+
+  if (!response.ok) {
+    const message =
+      await getResponseErrorMessage(
+        response,
+        "Unable to establish administrator session.",
+      );
+
+    if (
+      response.status === 401 ||
+      response.status === 403
+    ) {
+      clearAdminSessionState();
+      signalAdminSessionExpired();
+    }
+
+    throw new AdminApiError(
+      message,
+      response.status,
+    );
+  }
+
+  let payload: AdminSessionResponse;
+
+  try {
+    payload =
+      (await response.json()) as
+        AdminSessionResponse;
+  } catch {
+    throw new AdminApiError(
+      "Administrator session service returned an invalid response.",
+      500,
+    );
+  }
+
+  const csrfToken =
+    extractCsrfToken(payload);
+
+  if (!csrfToken) {
+    throw new AdminApiError(
+      "Administrator request verification could not be initialized.",
+      500,
+    );
+  }
+
+  adminCsrfToken = csrfToken;
+}
+
+
+/* ============================================================
+   SESSION INITIALIZATION
+============================================================ */
+
+async function initializeAdminSession():
+  Promise<void> {
+  /*
+   * First try the existing HttpOnly BAKABOOST session.
+   *
+   * This allows page reloads without creating unnecessary
+   * duplicate administrator sessions.
+   */
+  const restored =
+    await restoreAdminSession();
+
+  if (restored) {
+    return;
+  }
+
+  /*
+   * No BAKABOOST session exists.
+   *
+   * Exchange the authenticated Auth0 identity for a new
+   * server-managed application session.
+   */
+  await establishAdminSession();
+}
+
+
+async function ensureAdminSession():
+  Promise<void> {
+  if (adminCsrfToken) {
+    return;
+  }
+
+  if (!adminSessionInitialization) {
+    adminSessionInitialization =
+      initializeAdminSession()
+        .catch((error: unknown) => {
+          adminSessionInitialization = null;
+
+          throw error;
+        });
+  }
+
+  await adminSessionInitialization;
+}
+
+
+/* ============================================================
+   REQUEST METHOD HELPERS
+============================================================ */
+
+function normalizeMethod(
+  method: string | undefined,
+): string {
+  return (
+    method?.trim().toUpperCase() ||
+    "GET"
+  );
+}
+
+
+function methodRequiresCsrf(
+  method: string,
+): boolean {
+  return ![
+    "GET",
+    "HEAD",
+    "OPTIONS",
+  ].includes(method);
+}
+
+
+/* ============================================================
+   ADMIN FETCH
+============================================================ */
+
 async function adminFetch<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const token =
-    getAdminToken();
+  /*
+   * Establish or restore the server-managed administrator
+   * session before any protected request.
+   */
+  await ensureAdminSession();
 
   const headers =
-    new Headers(
-      options.headers,
+    new Headers(options.headers);
+
+  headers.set(
+    "Accept",
+    "application/json",
+  );
+
+  const method =
+    normalizeMethod(
+      options.method,
     );
 
-  if (token) {
+  /*
+   * Normal administrator API calls deliberately do NOT carry
+   * the Auth0 bearer token.
+   *
+   * Authentication comes from the FastAPI HttpOnly session
+   * cookie.
+   */
+  headers.delete(
+    "Authorization",
+  );
+
+  /*
+   * State-changing requests require CSRF verification bound
+   * to that same server-side administrator session.
+   */
+  if (
+    methodRequiresCsrf(method)
+  ) {
+    if (!adminCsrfToken) {
+      throw new AdminApiError(
+        "Administrator request verification is unavailable.",
+        403,
+      );
+    }
+
     headers.set(
-      "Authorization",
-      `Bearer ${token}`,
+      ADMIN_CSRF_HEADER,
+      adminCsrfToken,
     );
   }
 
+  /*
+   * Do NOT manually set Content-Type for FormData.
+   * The browser generates the multipart boundary.
+   */
   if (
-    options.body &&
+    options.body !== undefined &&
+    options.body !== null &&
     !(options.body instanceof FormData) &&
-    !headers.has(
-      "Content-Type",
-    )
+    !headers.has("Content-Type")
   ) {
     headers.set(
       "Content-Type",
@@ -150,67 +675,174 @@ async function adminFetch<T>(
     );
   }
 
-  const baseUrl =
-    process.env
-      .NEXT_PUBLIC_API_BASE_URL ??
-    "http://127.0.0.1:8000/api";
+  let response: Response;
 
-  const response =
-    await fetch(
-      `${baseUrl}${path}`,
+  try {
+    response = await fetch(
+      getApiUrl(path),
       {
         ...options,
+        method,
         headers,
-        credentials:
-          "include",
-        cache:
-          "no-store",
+
+        /*
+         * Required for the HttpOnly server-managed admin
+         * session and API-side CSRF cookie.
+         */
+        credentials: "include",
+
+        cache: "no-store",
       },
     );
+  } catch {
+    throw new AdminApiError(
+      "Unable to reach the BAKABOOST administrator API.",
+      0,
+    );
+  }
 
   if (!response.ok) {
-    let detail =
-      "Admin request failed.";
+    let message =
+      await getResponseErrorMessage(
+        response,
+        "Administrator request failed.",
+      );
 
-    try {
-      const payload =
-        (await response.json()) as {
-          detail?: string;
-        };
+    if (response.status === 401) {
+      /*
+       * Do NOT silently exchange Auth0 credentials for a new
+       * session here.
+       *
+       * An idle/expired/revoked administrator session should
+       * remain expired and force the administrator through the
+       * authentication boundary again.
+       */
+      clearAdminSessionState();
+      signalAdminSessionExpired();
 
       if (
-        typeof payload.detail ===
-          "string" &&
-        payload.detail.trim()
+        message ===
+        "Administrator request failed."
       ) {
-        detail =
-          payload.detail;
+        message =
+          "Administrator session has expired. Please sign in again.";
       }
-    } catch {
-      // Keep generic error.
     }
 
     if (
-      response.status === 401
+      response.status === 403 &&
+      message ===
+        "Administrator request failed."
     ) {
-      signalAdminSessionExpired();
+      message =
+        "You do not have permission to perform this administrator action.";
     }
 
     throw new AdminApiError(
-      detail,
+      message,
       response.status,
     );
   }
 
   if (
-    response.status === 204
+    response.status === 204 ||
+    response.headers.get(
+      "content-length",
+    ) === "0"
   ) {
     return undefined as T;
   }
 
-  return response.json() as Promise<T>;
+  const contentType =
+    response.headers.get(
+      "content-type",
+    );
+
+  if (
+    !contentType
+      ?.toLowerCase()
+      .includes("application/json")
+  ) {
+    throw new AdminApiError(
+      "Administrator API returned an unexpected response.",
+      response.status,
+    );
+  }
+
+  try {
+    return (await response.json()) as T;
+  } catch {
+    throw new AdminApiError(
+      "Administrator API returned invalid JSON.",
+      response.status,
+    );
+  }
 }
 
+
+/* ============================================================
+   ADMIN LOGOUT
+============================================================ */
+
+export async function logoutAdminSession():
+  Promise<void> {
+  await ensureAdminSession();
+
+  if (!adminCsrfToken) {
+    throw new AdminApiError(
+      "Administrator request verification is unavailable.",
+      403,
+    );
+  }
+
+  let response: Response;
+
+  try {
+    response = await fetch(
+      getApiUrl(
+        ADMIN_SESSION_PATH,
+      ),
+      {
+        method: "DELETE",
+
+        credentials: "include",
+        cache: "no-store",
+
+        headers: {
+          Accept: "application/json",
+
+          [ADMIN_CSRF_HEADER]:
+            adminCsrfToken,
+        },
+      },
+    );
+  } catch {
+    throw new AdminApiError(
+      "Unable to reach the BAKABOOST administrator API.",
+      0,
+    );
+  }
+
+  if (!response.ok) {
+    const message =
+      await getResponseErrorMessage(
+        response,
+        "Unable to end administrator session.",
+      );
+
+    throw new AdminApiError(
+      message,
+      response.status,
+    );
+  }
+
+  clearAdminSessionState();
+}
+
+
+/* ============================================================
+   QUEUE
+============================================================ */
 
 interface QueueQuery {
   search?: string;
@@ -240,10 +872,10 @@ export async function getAdminQueue({
   }
 
   statuses?.forEach(
-    (status) => {
+    (verificationStatus) => {
       query.append(
         "status",
-        status,
+        verificationStatus,
       );
     },
   );
@@ -264,10 +896,14 @@ export async function getAdminQueue({
 }
 
 
+/* ============================================================
+   CLAIM CASE
+============================================================ */
+
 export async function claimAdminCase(
   requestId: string,
 ): Promise<void> {
-  await adminFetch(
+  await adminFetch<void>(
     `/admin/verification-requests/${requestId}/claim`,
     {
       method: "POST",
@@ -276,24 +912,31 @@ export async function claimAdminCase(
 }
 
 
+/* ============================================================
+   REVOKE REQUEST
+============================================================ */
+
 export async function revokeVerificationRequest(
   requestId: string,
   reason?: string,
 ): Promise<void> {
-  await adminFetch(
+  await adminFetch<void>(
     `/admin/verification-requests/${requestId}/revoke`,
     {
       method: "POST",
 
-      body:
-        JSON.stringify({
-          reason:
-            reason || null,
-        }),
+      body: JSON.stringify({
+        reason:
+          reason?.trim() || null,
+      }),
     },
   );
 }
 
+
+/* ============================================================
+   CREATE REQUEST
+============================================================ */
 
 export async function createVerificationRequest(
   payload:
@@ -305,13 +948,15 @@ export async function createVerificationRequest(
       method: "POST",
 
       body:
-        JSON.stringify(
-          payload,
-        ),
+        JSON.stringify(payload),
     },
   );
 }
 
+
+/* ============================================================
+   EXTEND EXPIRATION
+============================================================ */
 
 export async function extendVerificationExpiration(
   requestId: string,
@@ -322,15 +967,17 @@ export async function extendVerificationExpiration(
     {
       method: "POST",
 
-      body:
-        JSON.stringify({
-          expires_at:
-            expiresAt,
-        }),
+      body: JSON.stringify({
+        expires_at: expiresAt,
+      }),
     },
   );
 }
 
+
+/* ============================================================
+   ASSIGN REVIEWER
+============================================================ */
 
 export async function assignVerificationReviewer(
   requestId: string,
@@ -343,13 +990,15 @@ export async function assignVerificationReviewer(
       method: "POST",
 
       body:
-        JSON.stringify(
-          payload,
-        ),
+        JSON.stringify(payload),
     },
   );
 }
 
+
+/* ============================================================
+   REVIEW DETAIL
+============================================================ */
 
 export async function getReviewDetail(
   requestId: string,
@@ -359,6 +1008,10 @@ export async function getReviewDetail(
   );
 }
 
+
+/* ============================================================
+   EVIDENCE PREVIEW
+============================================================ */
 
 export async function getEvidencePreview(
   evidenceId: string,
@@ -371,6 +1024,10 @@ export async function getEvidencePreview(
   );
 }
 
+
+/* ============================================================
+   ADMIN NOTES
+============================================================ */
 
 export async function getAdminNotes(
   requestId: string,
@@ -385,19 +1042,32 @@ export async function createAdminNote(
   requestId: string,
   note: string,
 ): Promise<void> {
-  await adminFetch(
+  const normalizedNote =
+    note.trim();
+
+  if (!normalizedNote) {
+    throw new AdminApiError(
+      "Administrator note cannot be empty.",
+      400,
+    );
+  }
+
+  await adminFetch<void>(
     `/admin/verification-requests/${requestId}/notes`,
     {
       method: "POST",
 
-      body:
-        JSON.stringify({
-          note,
-        }),
+      body: JSON.stringify({
+        note: normalizedNote,
+      }),
     },
   );
 }
 
+
+/* ============================================================
+   AUDIT HISTORY
+============================================================ */
 
 export async function getAuditHistory(
   requestId: string,
@@ -407,6 +1077,10 @@ export async function getAuditHistory(
   );
 }
 
+
+/* ============================================================
+   APPROVE
+============================================================ */
 
 export async function approveCase(
   requestId: string,
@@ -419,13 +1093,15 @@ export async function approveCase(
       method: "POST",
 
       body:
-        JSON.stringify(
-          payload,
-        ),
+        JSON.stringify(payload),
     },
   );
 }
 
+
+/* ============================================================
+   REJECT
+============================================================ */
 
 export async function rejectCase(
   requestId: string,
@@ -438,13 +1114,15 @@ export async function rejectCase(
       method: "POST",
 
       body:
-        JSON.stringify(
-          payload,
-        ),
+        JSON.stringify(payload),
     },
   );
 }
 
+
+/* ============================================================
+   REQUEST MORE INFORMATION
+============================================================ */
 
 export async function requestMoreInfo(
   requestId: string,
@@ -457,13 +1135,15 @@ export async function requestMoreInfo(
       method: "POST",
 
       body:
-        JSON.stringify(
-          payload,
-        ),
+        JSON.stringify(payload),
     },
   );
 }
 
+
+/* ============================================================
+   DISCORD ACCESS
+============================================================ */
 
 export async function grantDiscordAccess(
   requestId: string,
@@ -489,6 +1169,10 @@ export async function revokeDiscordAccess(
 }
 
 
+/* ============================================================
+   EVIDENCE DELETION
+============================================================ */
+
 export async function deleteVerificationEvidence(
   requestId: string,
 ): Promise<{
@@ -504,7 +1188,13 @@ export async function deleteVerificationEvidence(
   );
 }
 
-export async function getReviewers(): Promise<ReviewerListResponse> {
+
+/* ============================================================
+   REVIEWERS
+============================================================ */
+
+export async function getReviewers():
+  Promise<ReviewerListResponse> {
   return adminFetch<ReviewerListResponse>(
     "/admin/reviewers",
   );

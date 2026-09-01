@@ -3,6 +3,10 @@ import type {
 } from "next";
 
 import {
+  Inter,
+} from "next/font/google";
+
+import {
   SessionNavigationBridge,
 } from "@/components/navigation/session-navigation-bridge";
 
@@ -11,6 +15,15 @@ import {
 } from "@/components/ui/toast-provider";
 
 import "./globals.css";
+
+
+const inter = Inter({
+  subsets: ["latin"],
+
+  display: "swap",
+
+  variable: "--font-inter",
+});
 
 
 export const metadata: Metadata = {
@@ -39,7 +52,10 @@ export default function RootLayout({
     React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html
+      lang="en"
+      className={inter.variable}
+    >
       <body>
         <ToastProvider>
           <SessionNavigationBridge />
