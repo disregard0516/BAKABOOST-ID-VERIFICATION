@@ -11,11 +11,56 @@ def _require_https(
     name: str,
     value: str,
 ) -> None:
-    parsed = urlparse(value)
+    parsed = urlparse(value.strip())
 
-    if parsed.scheme != "https":
+    if (
+        parsed.scheme.lower() != "https"
+        or not parsed.netloc
+    ):
         raise UnsafeProductionConfiguration(
-            f"{name} must use HTTPS in production."
+            f"{name} must use a valid HTTPS URL "
+            "in production."
+        )
+
+
+def _require_cloudflare_access_team_domain(
+    value: str,
+) -> None:
+    team_domain = value.strip().lower()
+
+    if not team_domain:
+        raise UnsafeProductionConfiguration(
+            "Cloudflare Access team domain is missing."
+        )
+
+    #
+    # Configuration stores only the hostname:
+    #
+    # example.cloudflareaccess.com
+    #
+    # Schemes, paths, query strings and fragments are not
+    # accepted. Keeping this value canonical allows the
+    # authentication service to safely derive the issuer and
+    # signing-certificate endpoint.
+    #
+    parsed = urlparse(
+        f"https://{team_domain}"
+    )
+
+    if (
+        parsed.hostname != team_domain
+        or parsed.port is not None
+        or parsed.path not in {"", "/"}
+        or parsed.params
+        or parsed.query
+        or parsed.fragment
+        or not team_domain.endswith(
+            ".cloudflareaccess.com"
+        )
+    ):
+        raise UnsafeProductionConfiguration(
+            "CLOUDFLARE_ACCESS_TEAM_DOMAIN must be "
+            "a valid cloudflareaccess.com hostname."
         )
 
 
@@ -76,34 +121,48 @@ def validate_runtime_security() -> None:
             value.strip()
             in forbidden_secrets
         ):
-            raise (
-                UnsafeProductionConfiguration(
-                    f"{name} is not securely "
-                    "configured."
-                )
+            raise UnsafeProductionConfiguration(
+                f"{name} is not securely "
+                "configured."
             )
 
-    if not settings.admin_auth_issuer:
+    #
+    # Development-only administrator authentication must
+    # never be available in production.
+    #
+    if settings.dev_admin_auth_enabled:
         raise UnsafeProductionConfiguration(
-            "Admin authentication issuer is missing."
+            "Development administrator "
+            "authentication must be disabled "
+            "in production."
         )
 
-    if not settings.admin_auth_audience:
-        raise UnsafeProductionConfiguration(
-            "Admin authentication audience is missing."
-        )
+    #
+    # Cloudflare Access is the external administrator
+    # authentication boundary.
+    #
+    # BAKABOOST will cryptographically validate the Access
+    # application JWT before exchanging it for its own
+    # server-managed administrator session.
+    #
+    _require_cloudflare_access_team_domain(
+        settings.cloudflare_access_team_domain
+    )
 
-    if not settings.admin_auth_jwks_url:
+    if (
+        not settings
+        .cloudflare_access_audience
+        .strip()
+    ):
         raise UnsafeProductionConfiguration(
-            "Admin JWKS URL is missing."
+            "Cloudflare Access audience is missing."
         )
 
     #
     # Production rate limiting is mandatory.
     #
-    # An operator must not be able to bypass
-    # abuse protection by setting
-    # RATE_LIMITING_ENABLED=false.
+    # An operator must not be able to bypass abuse protection
+    # by setting RATE_LIMITING_ENABLED=false.
     #
     if not settings.rate_limiting_enabled:
         raise UnsafeProductionConfiguration(
@@ -118,9 +177,8 @@ def validate_runtime_security() -> None:
         )
 
     #
-    # Reject obviously invalid Redis URLs
-    # before the application starts serving
-    # traffic.
+    # Reject obviously invalid Redis URLs before the
+    # application starts serving traffic.
     #
     redis_scheme = urlparse(
         settings.redis_url

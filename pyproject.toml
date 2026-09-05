@@ -18,6 +18,7 @@ dependencies = [
     "cryptography",
     "boto3",
     "PyJWT[crypto]",
+    "certifi",
     "redis[hiredis]",
 ]
 

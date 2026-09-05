@@ -1,7 +1,10 @@
+from __future__ import annotations
+
+import ssl
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Any
 
+import certifi
 import jwt
 from jwt import PyJWKClient
 from sqlalchemy import select
@@ -10,10 +13,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.db.models.admin import Admin
 
-_AUTH_TIME_CLOCK_SKEW_SECONDS = 60
+_DEV_ADMIN_ISSUER = (
+    "discord-verification-local-dev"
+)
 
-_DEV_ADMIN_ISSUER = "discord-verification-local-dev"
-_DEV_ADMIN_AUDIENCE = "discord-verification-admin"
+_DEV_ADMIN_AUDIENCE = (
+    "discord-verification-admin"
+)
+
+_CLOUDFLARE_ACCESS_SUFFIX = (
+    ".cloudflareaccess.com"
+)
+
+
+# ============================================================
+# EXCEPTIONS
+# ============================================================
 
 
 class AdminAuthenticationError(Exception):
@@ -26,16 +41,9 @@ class AdminAccountDisabledError(
     pass
 
 
-class AdminMFARequiredError(
-    AdminAuthenticationError
-):
-    pass
-
-
-class AdminReauthenticationRequiredError(
-    AdminAuthenticationError
-):
-    pass
+# ============================================================
+# IDENTITY MODEL
+# ============================================================
 
 
 @dataclass(frozen=True)
@@ -45,19 +53,50 @@ class AdminIdentity:
     claims: dict[str, Any]
 
 
+# ============================================================
+# ENVIRONMENT HELPERS
+# ============================================================
+
+
 def _development_admin_auth_enabled() -> bool:
+    """
+    Development authentication is available only when:
+
+    - the application is explicitly in development mode;
+    - the dedicated development-auth flag is enabled.
+
+    Production runtime validation separately forbids this
+    mechanism.
+    """
+
     return (
-        settings.app_environment.strip().lower()
+        settings.app_environment
+        .strip()
+        .lower()
         == "development"
         and settings.dev_admin_auth_enabled
     )
 
 
+# ============================================================
+# DEVELOPMENT TOKEN VALIDATION
+# ============================================================
+
+
 def _decode_development_admin_token(
     raw_token: str,
 ) -> dict[str, Any]:
+    """
+    Validate the dedicated local-development administrator
+    token.
+
+    This mechanism is intentionally unavailable unless
+    development authentication is explicitly enabled.
+    """
+
     secret = (
-        settings.dev_admin_auth_secret.strip()
+        settings.dev_admin_auth_secret
+        .strip()
     )
 
     if len(secret) < 32:
@@ -67,10 +106,12 @@ def _decode_development_admin_token(
         )
 
     try:
-        return jwt.decode(
+        claims = jwt.decode(
             raw_token,
             secret,
-            algorithms=["HS256"],
+            algorithms=[
+                "HS256",
+            ],
             audience=_DEV_ADMIN_AUDIENCE,
             issuer=_DEV_ADMIN_ISSUER,
             options={
@@ -78,7 +119,6 @@ def _decode_development_admin_token(
                     "exp",
                     "iat",
                     "sub",
-                    "auth_time",
                 ],
             },
         )
@@ -89,31 +129,133 @@ def _decode_development_admin_token(
             "authentication."
         ) from exc
 
+    if not isinstance(
+        claims,
+        dict,
+    ):
+        raise AdminAuthenticationError(
+            "Invalid administrator "
+            "authentication."
+        )
 
-def _decode_oidc_admin_token(
+    return claims
+
+
+# ============================================================
+# CLOUDFLARE ACCESS CONFIGURATION
+# ============================================================
+
+
+def _get_cloudflare_access_team_domain() -> str:
+    team_domain = (
+        settings
+        .cloudflare_access_team_domain
+        .strip()
+        .lower()
+    )
+
+    if (
+        not team_domain
+        or not team_domain.endswith(
+            _CLOUDFLARE_ACCESS_SUFFIX
+        )
+    ):
+        raise AdminAuthenticationError(
+            "Administrator authentication "
+            "provider is not configured."
+        )
+
+    return team_domain
+
+
+def _get_cloudflare_access_audience() -> str:
+    audience = (
+        settings
+        .cloudflare_access_audience
+        .strip()
+    )
+
+    if not audience:
+        raise AdminAuthenticationError(
+            "Administrator authentication "
+            "audience is not configured."
+        )
+
+    return audience
+
+
+def _cloudflare_access_issuer(
+    team_domain: str,
+) -> str:
+    return f"https://{team_domain}"
+
+
+def _cloudflare_access_jwks_url(
+    team_domain: str,
+) -> str:
+    return (
+        f"https://{team_domain}"
+        "/cdn-cgi/access/certs"
+    )
+
+
+# ============================================================
+# CLOUDFLARE ACCESS JWT VALIDATION
+# ============================================================
+
+
+def _decode_cloudflare_access_token(
     raw_token: str,
 ) -> dict[str, Any]:
-    if not settings.admin_auth_jwks_url:
-        raise AdminAuthenticationError(
-            "Admin authentication provider "
-            "is not configured."
-        )
+    """
+    Cryptographically validate a Cloudflare Access
+    application JWT.
 
-    if not settings.admin_auth_issuer:
-        raise AdminAuthenticationError(
-            "Admin authentication issuer "
-            "is not configured."
-        )
+    Validation includes:
 
-    if not settings.admin_auth_audience:
-        raise AdminAuthenticationError(
-            "Admin authentication audience "
-            "is not configured."
+    - RS256 signature;
+    - dynamically retrieved Cloudflare Access signing key;
+    - expected Zero Trust team issuer;
+    - expected Access application audience;
+    - expiration;
+    - not-before;
+    - issued-at;
+    - immutable subject;
+    - application-token type.
+
+    MFA is deliberately NOT inferred from this JWT.
+    Independent MFA is enforced by the Cloudflare Access
+    application/policy boundary.
+    """
+
+    team_domain = (
+        _get_cloudflare_access_team_domain()
+    )
+
+    audience = (
+        _get_cloudflare_access_audience()
+    )
+
+    issuer = (
+        _cloudflare_access_issuer(
+            team_domain
         )
+    )
+
+    jwks_url = (
+        _cloudflare_access_jwks_url(
+            team_domain
+        )
+    )
 
     try:
+        ssl_context = ssl.create_default_context(
+            cafile=certifi.where()
+        )
+
         jwks_client = PyJWKClient(
-            settings.admin_auth_jwks_url
+            jwks_url,
+            ssl_context=ssl_context,
         )
 
         signing_key = (
@@ -123,21 +265,22 @@ def _decode_oidc_admin_token(
             )
         )
 
-        return jwt.decode(
+        claims = jwt.decode(
             raw_token,
             signing_key.key,
-            algorithms=["RS256"],
-            audience=(
-                settings.admin_auth_audience
-            ),
-            issuer=(
-                settings.admin_auth_issuer
-            ),
+            algorithms=[
+                "RS256",
+            ],
+            audience=audience,
+            issuer=issuer,
             options={
                 "require": [
                     "exp",
                     "iat",
+                    "nbf",
                     "sub",
+                    "aud",
+                    "iss",
                 ],
             },
         )
@@ -148,83 +291,140 @@ def _decode_oidc_admin_token(
             "authentication."
         ) from exc
 
+    if not isinstance(
+        claims,
+        dict,
+    ):
+        raise AdminAuthenticationError(
+            "Invalid administrator "
+            "authentication."
+        )
+
+    token_type = claims.get(
+        "type"
+    )
+
+    if (
+        not isinstance(
+            token_type,
+            str,
+        )
+        or token_type.strip().lower()
+        != "app"
+    ):
+        raise AdminAuthenticationError(
+            "Invalid administrator "
+            "authentication."
+        )
+
+    return claims
+
+
+# ============================================================
+# IDENTITY DECODING
+# ============================================================
+
 
 def decode_admin_token(
     raw_token: str,
 ) -> AdminIdentity:
+    """
+    Validate an administrator identity assertion.
+
+    Production uses a Cloudflare Access application JWT.
+
+    Development may use the dedicated local token only when
+    development authentication is explicitly enabled.
+
+    External authentication never grants BAKABOOST
+    administrator authorization by itself.
+    """
+
+    if not isinstance(
+        raw_token,
+        str,
+    ):
+        raise AdminAuthenticationError(
+            "Invalid administrator "
+            "authentication."
+        )
+
+    normalized_token = (
+        raw_token.strip()
+    )
+
+    if not normalized_token:
+        raise AdminAuthenticationError(
+            "Invalid administrator "
+            "authentication."
+        )
+
     if _development_admin_auth_enabled():
         claims = (
             _decode_development_admin_token(
-                raw_token
+                normalized_token
             )
         )
+
     else:
         claims = (
-            _decode_oidc_admin_token(
-                raw_token
+            _decode_cloudflare_access_token(
+                normalized_token
             )
         )
 
-    subject = claims.get("sub")
+    subject = claims.get(
+        "sub"
+    )
 
-    if not subject:
+    if not isinstance(
+        subject,
+        str,
+    ):
         raise AdminAuthenticationError(
-            "Administrator token has no "
-            "subject."
+            "Administrator authentication "
+            "has no subject."
         )
 
+    normalized_subject = (
+        subject.strip()
+    )
+
+    if not normalized_subject:
+        raise AdminAuthenticationError(
+            "Administrator authentication "
+            "has no subject."
+        )
+
+    email_value = claims.get(
+        "email"
+    )
+
+    email: str | None = None
+
+    if isinstance(
+        email_value,
+        str,
+    ):
+        normalized_email = (
+            email_value
+            .strip()
+            .lower()
+        )
+
+        if normalized_email:
+            email = normalized_email
+
     return AdminIdentity(
-        subject=str(subject),
-        email=claims.get("email"),
+        subject=normalized_subject,
+        email=email,
         claims=claims,
     )
 
 
-def admin_token_has_mfa(
-    claims: dict[str, Any],
-) -> bool:
-    amr = claims.get("amr")
-
-    if isinstance(amr, list):
-        normalized = {
-            str(value).lower()
-            for value in amr
-        }
-
-        if {
-            "mfa",
-            "otp",
-            "webauthn",
-            "hwk",
-        } & normalized:
-            return True
-
-    acr = claims.get("acr")
-
-    if isinstance(acr, str):
-        lowered = acr.lower()
-
-        if (
-            "mfa" in lowered
-            or "multi" in lowered
-        ):
-            return True
-
-    return False
-
-
-def require_admin_mfa(
-    identity: AdminIdentity,
-) -> None:
-    if not settings.admin_auth_required_mfa:
-        return
-
-    if not admin_token_has_mfa(
-        identity.claims
-    ):
-        raise AdminMFARequiredError(
-            "Administrator MFA is required."
-        )
+# ============================================================
+# LOCAL ADMINISTRATOR AUTHORIZATION
+# ============================================================
 
 
 async def get_admin_for_identity(
@@ -232,14 +432,26 @@ async def get_admin_for_identity(
     *,
     identity: AdminIdentity,
 ) -> Admin:
+    """
+    Bind the externally authenticated immutable subject to an
+    explicitly provisioned local administrator.
+
+    A valid Cloudflare Access identity is not automatically a
+    BAKABOOST administrator.
+    """
+
     result = await session.execute(
-        select(Admin).where(
+        select(
+            Admin
+        ).where(
             Admin.auth_subject
             == identity.subject
         )
     )
 
-    admin = result.scalar_one_or_none()
+    admin = (
+        result.scalar_one_or_none()
+    )
 
     if admin is None:
         raise AdminAuthenticationError(
@@ -254,68 +466,3 @@ async def get_admin_for_identity(
         )
 
     return admin
-
-
-def require_recent_admin_authentication(
-    identity: AdminIdentity,
-) -> None:
-    auth_time = identity.claims.get(
-        "auth_time"
-    )
-
-    if auth_time is None:
-        raise (
-            AdminReauthenticationRequiredError(
-                "Recent authentication "
-                "required."
-            )
-        )
-
-    try:
-        authenticated_at = (
-            datetime.fromtimestamp(
-                int(auth_time),
-                tz=UTC,
-            )
-        )
-
-    except (
-        TypeError,
-        ValueError,
-        OverflowError,
-        OSError,
-    ):
-        raise (
-            AdminReauthenticationRequiredError(
-                "Recent authentication "
-                "required."
-            )
-        ) from None
-
-    age_seconds = (
-        datetime.now(UTC)
-        - authenticated_at
-    ).total_seconds()
-
-    if (
-        age_seconds
-        < -_AUTH_TIME_CLOCK_SKEW_SECONDS
-    ):
-        raise (
-            AdminReauthenticationRequiredError(
-                "Recent authentication "
-                "required."
-            )
-        )
-
-    if (
-        age_seconds
-        > settings
-        .admin_sensitive_reauth_max_age_seconds
-    ):
-        raise (
-            AdminReauthenticationRequiredError(
-                "Recent authentication "
-                "required."
-            )
-        )

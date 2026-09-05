@@ -39,11 +39,79 @@ class Settings(BaseSettings):
     )
 
 
-    admin_auth_issuer: str = ""
-    admin_auth_audience: str = ""
-    admin_auth_jwks_url: str = ""
+    # --------------------------------------------------------
+    # Cloudflare Access administrator authentication
+    # --------------------------------------------------------
 
-    admin_auth_required_mfa: bool = True
+    # Example:
+    # bakaboost.cloudflareaccess.com
+    #
+    # Store the hostname only. The backend derives the
+    # expected issuer and signing-certificate endpoint from it.
+    cloudflare_access_team_domain: str = ""
+
+    # Cloudflare Access Application Audience (AUD) tag.
+    # This binds assertions to the specific BAKABOOST
+    # administrator Access application.
+    cloudflare_access_audience: str = ""
+
+        # --------------------------------------------------------
+    # Administrator session security
+    # --------------------------------------------------------
+
+    # Production authentication cookie.
+    #
+    # __Host- requires:
+    # - Secure
+    # - Path=/
+    # - no Domain attribute
+    #
+    admin_session_cookie_name: str = (
+        "__Host-bakaboost_admin_session"
+    )
+
+    # Local development runs over plain HTTP, where __Host-
+    # cookies cannot be used.
+    admin_session_development_cookie_name: str = (
+        "bakaboost_admin_session"
+    )
+
+    # Production administrator CSRF cookie.
+    admin_csrf_cookie_name: str = (
+        "__Host-bakaboost_admin_csrf"
+    )
+
+    # Local-development CSRF cookie.
+    admin_csrf_development_cookie_name: str = (
+        "bakaboost_admin_csrf"
+    )
+
+    admin_csrf_header_name: str = (
+        "X-Admin-CSRF-Token"
+    )
+
+    # secrets.token_urlsafe() receives a byte count.
+    # Keep both credentials at >= 32 bytes of entropy.
+    admin_session_token_bytes: int = 48
+    admin_csrf_token_bytes: int = 32
+
+    # Session expires after 30 minutes without activity.
+    admin_session_idle_timeout_seconds: int = 30 * 60
+
+    # Hard maximum lifetime of an administrator session:
+    # 8 hours regardless of activity.
+    admin_session_absolute_lifetime_seconds: int = 8 * 60 * 60
+
+    # Rotate session credentials/security material
+    # periodically during an active session.
+    admin_session_rotation_interval_seconds: int = 15 * 60
+
+    # Limit concurrent sessions for one administrator.
+    admin_max_active_sessions: int = 3
+
+    # Keep security context for session validation/auditing.
+    admin_session_track_ip: bool = True
+    admin_session_track_user_agent: bool = True
 
     dev_admin_auth_enabled: bool = False
     dev_admin_auth_secret: str = ""

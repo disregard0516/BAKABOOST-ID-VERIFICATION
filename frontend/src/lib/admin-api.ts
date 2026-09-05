@@ -556,7 +556,7 @@ async function initializeAdminSession():
 }
 
 
-async function ensureAdminSession():
+export async function ensureAdminSession():
   Promise<void> {
   if (adminCsrfToken) {
     return;

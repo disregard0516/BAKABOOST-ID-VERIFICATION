@@ -1,5 +1,7 @@
 from app.db.models.admin import Admin
+from app.db.models.admin_invitation import AdminInvitation
 from app.db.models.admin_note import AdminNote
+from app.db.models.admin_session import AdminSession
 from app.db.models.audit_event import AuditEvent
 from app.db.models.discord_access_grant import DiscordAccessGrant
 from app.db.models.discord_oauth_state import DiscordOAuthState
@@ -16,7 +18,9 @@ from app.db.models.verification_submission import VerificationSubmission
 
 __all__ = [
     "Admin",
+    "AdminInvitation",
     "AdminNote",
+    "AdminSession",
     "AuditEvent",
     "DiscordAccessGrant",
     "DiscordOAuthState",

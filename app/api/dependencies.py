@@ -506,9 +506,13 @@ def require_permission(
 
 def _development_admin_step_up_bypass_enabled() -> bool:
     """
-    Temporary local-development compatibility only.
+    Explicit local-development compatibility only.
 
-    Production can never use this bypass.
+    The bypass exists solely for the dedicated development
+    administrator authentication mode.
+
+    Production runtime validation forbids development
+    administrator authentication entirely.
     """
 
     environment = (
@@ -519,9 +523,7 @@ def _development_admin_step_up_bypass_enabled() -> bool:
 
     return (
         environment == "development"
-        and not (
-            settings.admin_auth_required_mfa
-        )
+        and settings.dev_admin_auth_enabled
     )
 
 

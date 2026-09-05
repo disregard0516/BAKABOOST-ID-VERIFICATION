@@ -52,21 +52,18 @@ def configure_valid_production(
     )
     monkeypatch.setattr(
         settings,
-        "admin_auth_issuer",
-        "https://auth.example.com/",
+        "dev_admin_auth_enabled",
+        False,
     )
     monkeypatch.setattr(
         settings,
-        "admin_auth_audience",
-        "discord-verification-admin",
+        "cloudflare_access_team_domain",
+        "bakaboost.cloudflareaccess.com",
     )
     monkeypatch.setattr(
         settings,
-        "admin_auth_jwks_url",
-        (
-            "https://auth.example.com/"
-            ".well-known/jwks.json"
-        ),
+        "cloudflare_access_audience",
+        "bakaboost-admin-access-audience",
     )
     monkeypatch.setattr(
         settings,
@@ -88,6 +85,189 @@ def test_valid_production_security_configuration(
     )
 
     validate_runtime_security()
+
+
+def test_production_rejects_debug(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configure_valid_production(
+        monkeypatch
+    )
+
+    monkeypatch.setattr(
+        settings,
+        "debug",
+        True,
+    )
+
+    with pytest.raises(
+        UnsafeProductionConfiguration,
+        match="DEBUG must be false",
+    ):
+        validate_runtime_security()
+
+
+@pytest.mark.parametrize(
+    ("setting_name", "value", "expected"),
+    [
+        (
+            "frontend_url",
+            "http://verify.example.com",
+            "FRONTEND_URL must use a valid HTTPS URL",
+        ),
+        (
+            "backend_url",
+            "http://api.example.com",
+            "BACKEND_URL must use a valid HTTPS URL",
+        ),
+    ],
+)
+def test_production_requires_https_application_urls(
+    monkeypatch: pytest.MonkeyPatch,
+    setting_name: str,
+    value: str,
+    expected: str,
+) -> None:
+    configure_valid_production(
+        monkeypatch
+    )
+
+    monkeypatch.setattr(
+        settings,
+        setting_name,
+        value,
+    )
+
+    with pytest.raises(
+        UnsafeProductionConfiguration,
+        match=expected,
+    ):
+        validate_runtime_security()
+
+
+def test_production_requires_secure_cookies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configure_valid_production(
+        monkeypatch
+    )
+
+    monkeypatch.setattr(
+        settings,
+        "cookie_secure",
+        False,
+    )
+
+    with pytest.raises(
+        UnsafeProductionConfiguration,
+        match="COOKIE_SECURE must be true",
+    ):
+        validate_runtime_security()
+
+
+def test_production_rejects_development_admin_auth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configure_valid_production(
+        monkeypatch
+    )
+
+    monkeypatch.setattr(
+        settings,
+        "dev_admin_auth_enabled",
+        True,
+    )
+
+    with pytest.raises(
+        UnsafeProductionConfiguration,
+        match=(
+            "Development administrator "
+            "authentication must be disabled"
+        ),
+    ):
+        validate_runtime_security()
+
+
+def test_production_requires_cloudflare_access_team_domain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configure_valid_production(
+        monkeypatch
+    )
+
+    monkeypatch.setattr(
+        settings,
+        "cloudflare_access_team_domain",
+        "",
+    )
+
+    with pytest.raises(
+        UnsafeProductionConfiguration,
+        match=(
+            "Cloudflare Access team domain "
+            "is missing"
+        ),
+    ):
+        validate_runtime_security()
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "example.com",
+        "https://bakaboost.cloudflareaccess.com",
+        "bakaboost.cloudflareaccess.com/path",
+        "bakaboost.cloudflareaccess.com:443",
+        "bakaboost.cloudflareaccess.com?test=1",
+        "bakaboost.cloudflareaccess.com#fragment",
+    ],
+)
+def test_production_rejects_invalid_cloudflare_access_team_domain(
+    monkeypatch: pytest.MonkeyPatch,
+    value: str,
+) -> None:
+    configure_valid_production(
+        monkeypatch
+    )
+
+    monkeypatch.setattr(
+        settings,
+        "cloudflare_access_team_domain",
+        value,
+    )
+
+    with pytest.raises(
+        UnsafeProductionConfiguration,
+        match=(
+            "CLOUDFLARE_ACCESS_TEAM_DOMAIN "
+            "must be a valid "
+            "cloudflareaccess.com hostname"
+        ),
+    ):
+        validate_runtime_security()
+
+
+def test_production_requires_cloudflare_access_audience(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configure_valid_production(
+        monkeypatch
+    )
+
+    monkeypatch.setattr(
+        settings,
+        "cloudflare_access_audience",
+        "",
+    )
+
+    with pytest.raises(
+        UnsafeProductionConfiguration,
+        match=(
+            "Cloudflare Access audience "
+            "is missing"
+        ),
+    ):
+        validate_runtime_security()
 
 
 def test_production_cannot_disable_rate_limiting(
@@ -150,7 +330,7 @@ def test_production_rejects_invalid_redis_scheme(
         validate_runtime_security()
 
 
-def test_development_can_run_without_redis(
+def test_development_can_run_without_production_security(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -163,6 +343,12 @@ def test_development_can_run_without_redis(
         settings,
         "redis_url",
         "",
+    )
+
+    monkeypatch.setattr(
+        settings,
+        "dev_admin_auth_enabled",
+        True,
     )
 
     validate_runtime_security()

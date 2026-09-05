@@ -30,15 +30,8 @@ from app.db.models.admin import Admin
 from app.db.session import get_db_session
 from app.services.admin.auth import (
     AdminAuthenticationError,
-    AdminMFARequiredError,
-    AdminReauthenticationRequiredError,
-    admin_token_has_mfa,
-    admin_token_has_phishing_resistant_mfa,
     decode_admin_token,
-    get_admin_authenticated_at,
     get_admin_for_identity,
-    require_admin_mfa,
-    require_recent_admin_authentication,
 )
 from app.services.admin.session_service import (
     AdminSessionError,
@@ -100,20 +93,6 @@ def _is_production() -> bool:
         .lower()
         == "production"
     )
-
-
-def _development_step_up_bypass_enabled() -> bool:
-    """
-    Temporary development-only compatibility.
-
-    Production can never use this bypass.
-    """
-
-    return (
-        not _is_production()
-        and not settings.admin_auth_required_mfa
-    )
-
 
 def _client_ip(
     request: Request,
@@ -440,72 +419,148 @@ def _admin_payload(
 async def establish_admin_session(
     request: Request,
     response: Response,
-    credentials: BearerCredentials,
     db: DatabaseSession,
+    credentials: BearerCredentials,
+    cloudflare_access_assertion: Annotated[
+        str | None,
+        Header(
+            alias="Cf-Access-Jwt-Assertion",
+        ),
+    ] = None,
 ) -> dict[str, object]:
     """
-    Exchange a valid external OIDC access token for a
-    BAKABOOST server-managed administrator session.
+    Exchange an externally authenticated administrator
+    identity for a BAKABOOST server-managed session.
 
-    Successful external authentication alone does NOT grant
-    administrator access.
+    Production authentication requires a cryptographically
+    validated Cloudflare Access application JWT supplied in
+    Cf-Access-Jwt-Assertion.
 
-    The immutable external subject must also correspond to an
-    explicitly provisioned and active local Admin row.
+    The Authorization Bearer mechanism is accepted only by
+    the explicitly enabled local-development authentication
+    mode.
+
+    External authentication alone never grants local
+    administrator authorization. The immutable external
+    subject must match an explicitly provisioned and active
+    local Admin row.
+
+    Cloudflare Access application JWTs do not provide a
+    trustworthy equivalent of Auth0 auth_time/AMR assurance.
+    Therefore this normal session-establishment endpoint does
+    not mark MFA or phishing-resistant MFA as locally
+    verified. Sensitive operations remain fail-closed until
+    explicit step-up assurance is established separately.
     """
 
+    environment = (
+        str(settings.app_environment)
+        .strip()
+        .lower()
+    )
+
+    development_auth = (
+        environment == "development"
+        and settings.dev_admin_auth_enabled
+    )
+
+    raw_assertion: str | None = None
+    auth_method: str
+
     # --------------------------------------------------------
-    # Missing bearer credential
+    # Resolve the external authentication assertion
     # --------------------------------------------------------
 
-    if credentials is None:
-        await _record_denied_auth_event(
-            db,
-            request=request,
-            action=AuditAction.ADMIN_AUTH_DENIED,
-            reason="missing_bearer_credentials",
-        )
+    if development_auth:
+        #
+        # Dedicated local-development authentication only.
+        #
+        if credentials is not None:
+            candidate = (
+                credentials.credentials
+                .strip()
+            )
 
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required.",
-            headers={
-                "WWW-Authenticate": "Bearer",
-            },
-        )
+            if candidate:
+                raw_assertion = candidate
+
+        auth_method = "development"
+
+        if raw_assertion is None:
+            await _record_denied_auth_event(
+                db,
+                request=request,
+                action=(
+                    AuditAction
+                    .ADMIN_AUTH_DENIED
+                ),
+                reason=(
+                    "missing_development_"
+                    "credentials"
+                ),
+            )
+
+            raise HTTPException(
+                status_code=(
+                    status.HTTP_401_UNAUTHORIZED
+                ),
+                detail="Authentication required.",
+                headers={
+                    "WWW-Authenticate": "Bearer",
+                },
+            )
+
+    else:
+        #
+        # Production/staging external administrator
+        # authentication must come from Cloudflare Access.
+        #
+        if isinstance(
+            cloudflare_access_assertion,
+            str,
+        ):
+            candidate = (
+                cloudflare_access_assertion
+                .strip()
+            )
+
+            if candidate:
+                raw_assertion = candidate
+
+        auth_method = "cloudflare_access"
+
+        if raw_assertion is None:
+            await _record_denied_auth_event(
+                db,
+                request=request,
+                action=(
+                    AuditAction
+                    .ADMIN_AUTH_DENIED
+                ),
+                reason=(
+                    "missing_cloudflare_"
+                    "access_assertion"
+                ),
+            )
+
+            raise HTTPException(
+                status_code=(
+                    status.HTTP_401_UNAUTHORIZED
+                ),
+                detail="Authentication required.",
+            )
 
     admin: Admin | None = None
     created: CreatedAdminSession | None = None
 
     try:
         # ----------------------------------------------------
-        # Verify external identity
+        # Cryptographically verify external identity
         # ----------------------------------------------------
 
         identity = decode_admin_token(
-            credentials.credentials
+            raw_assertion
         )
-
-        development_bypass = (
-            _development_step_up_bypass_enabled()
-        )
-
-        # ----------------------------------------------------
-        # MFA policy
-        # ----------------------------------------------------
-
-        if not development_bypass:
-            require_admin_mfa(
-                identity
-            )
-
-            #
-            # Do not silently convert a very old IdP session
-            # into a fresh BAKABOOST administrator session.
-            #
-            require_recent_admin_authentication(
-                identity
-            )
 
         # ----------------------------------------------------
         # Exact local administrator binding
@@ -516,56 +571,42 @@ async def establish_admin_session(
             identity=identity,
         )
 
-        # ----------------------------------------------------
-        # Authentication timestamp
-        # ----------------------------------------------------
-
-        authenticated_at = (
-            get_admin_authenticated_at(
-                identity,
-                require_auth_time=(
-                    not development_bypass
-                ),
-            )
-        )
-
+        #
+        # This timestamp represents establishment of the
+        # BAKABOOST session from a valid external assertion.
+        #
+        # It is deliberately NOT treated as proof that MFA or
+        # interactive reauthentication occurred at this exact
+        # instant.
+        #
         now = datetime.now(UTC)
 
         # ----------------------------------------------------
-        # Authentication assurance snapshot
+        # Authentication assurance
         # ----------------------------------------------------
 
-        mfa_verified_at = (
-            now
-            if admin_token_has_mfa(
-                identity.claims
-            )
-            else None
-        )
-
-        phishing_resistant_verified_at = (
-            now
-            if (
-                admin_token_has_phishing_resistant_mfa(
-                    identity.claims
-                )
-            )
-            else None
-        )
+        #
+        # Do not infer MFA from Cloudflare Access application
+        # JWT claims. Independent MFA belongs to the Access
+        # policy boundary, and explicit local step-up
+        # assurance is handled separately.
+        #
+        mfa_verified_at = None
+        phishing_resistant_verified_at = None
 
         # ----------------------------------------------------
-        # Create server-side session
+        # Create server-managed session
         # ----------------------------------------------------
 
         created = await create_admin_session(
             db,
             admin=admin,
-            authenticated_at=authenticated_at,
+            authenticated_at=now,
             mfa_verified_at=mfa_verified_at,
             phishing_resistant_verified_at=(
                 phishing_resistant_verified_at
             ),
-            auth_method="oidc",
+            auth_method=auth_method,
             ip_address=_client_ip(
                 request
             ),
@@ -588,14 +629,9 @@ async def establish_admin_session(
                 .value
             ),
             metadata={
-                "auth_method": "oidc",
-                "mfa_verified": (
-                    mfa_verified_at is not None
-                ),
-                "phishing_resistant_mfa": (
-                    phishing_resistant_verified_at
-                    is not None
-                ),
+                "auth_method": auth_method,
+                "mfa_verified": False,
+                "phishing_resistant_mfa": False,
             },
             ip_address=_client_ip(
                 request
@@ -626,7 +662,7 @@ async def establish_admin_session(
                 .value
             ),
             metadata={
-                "auth_method": "oidc",
+                "auth_method": auth_method,
             },
             ip_address=_client_ip(
                 request
@@ -644,47 +680,10 @@ async def establish_admin_session(
         )
 
         # ----------------------------------------------------
-        # Persist session + successful audit events atomically
+        # Persist session + audit atomically
         # ----------------------------------------------------
 
         await db.commit()
-
-    except AdminMFARequiredError as exc:
-        await db.rollback()
-
-        await _record_denied_auth_event(
-            db,
-            request=request,
-            action=AuditAction.ADMIN_MFA_REQUIRED,
-            reason="mfa_required",
-        )
-
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                "Additional administrator "
-                "authentication required."
-            ),
-        ) from exc
-
-    except AdminReauthenticationRequiredError as exc:
-        await db.rollback()
-
-        await _record_denied_auth_event(
-            db,
-            request=request,
-            action=(
-                AuditAction.ADMIN_REAUTH_REQUIRED
-            ),
-            reason="reauthentication_required",
-        )
-
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                "Administrator reauthentication required."
-            ),
-        ) from exc
 
     except AdminAuthenticationError as exc:
         await db.rollback()
@@ -692,19 +691,32 @@ async def establish_admin_session(
         await _record_denied_auth_event(
             db,
             request=request,
-            action=AuditAction.ADMIN_AUTH_DENIED,
+            action=(
+                AuditAction.ADMIN_AUTH_DENIED
+            ),
             reason="authentication_denied",
             admin=admin,
         )
 
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=(
-                "Invalid administrator authentication."
-            ),
-            headers={
+        response_headers: dict[
+            str,
+            str,
+        ] | None = None
+
+        if development_auth:
+            response_headers = {
                 "WWW-Authenticate": "Bearer",
-            },
+            }
+
+        raise HTTPException(
+            status_code=(
+                status.HTTP_401_UNAUTHORIZED
+            ),
+            detail=(
+                "Invalid administrator "
+                "authentication."
+            ),
+            headers=response_headers,
         ) from exc
 
     except AdminSessionError as exc:
@@ -713,13 +725,19 @@ async def establish_admin_session(
         await _record_denied_auth_event(
             db,
             request=request,
-            action=AuditAction.ADMIN_AUTH_DENIED,
-            reason="session_establishment_failed",
+            action=(
+                AuditAction.ADMIN_AUTH_DENIED
+            ),
+            reason=(
+                "session_establishment_failed"
+            ),
             admin=admin,
         )
 
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=(
+                status.HTTP_401_UNAUTHORIZED
+            ),
             detail=(
                 "Unable to establish "
                 "administrator session."
@@ -737,7 +755,7 @@ async def establish_admin_session(
         )
 
     # --------------------------------------------------------
-    # Only set cookies after the DB transaction succeeds
+    # Set cookies only after DB commit succeeds
     # --------------------------------------------------------
 
     _set_admin_cookies(

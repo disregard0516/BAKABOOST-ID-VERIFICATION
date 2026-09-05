@@ -526,7 +526,8 @@ export function CreateVerificationRequestForm() {
               rounded-[22px]
               border
               border-white/[0.07]
-              bg-white/[0.025]
+              bg-black
+              text-white
             "
           >
             <div
@@ -1161,7 +1162,8 @@ export function CreateVerificationRequestForm() {
                 rounded-[18px]
                 border
                 border-amber-500/10
-                bg-amber-500/[0.025]
+                bg-black
+                text-white
                 p-4
               "
             >
@@ -1201,13 +1203,13 @@ const inputClass = `
   rounded-[13px]
   border
   border-white/[0.07]
-  bg-[#0a111c]
+  bg-black
   px-3
   text-xs
-  text-slate-300
+  text-white
   outline-none
   transition
-  placeholder:text-slate-700
+  placeholder:text-slate-500
   focus:border-violet-500/40
   focus:ring-4
   focus:ring-violet-500/[0.04]
@@ -1570,7 +1572,8 @@ function CreatedRequestState({
           rounded-[24px]
           border
           border-emerald-500/20
-          bg-emerald-500/[0.045]
+          bg-black
+          text-white
         "
       >
         <div
@@ -1590,8 +1593,8 @@ function CreatedRequestState({
               items-center
               justify-center
               rounded-[18px]
-              bg-emerald-500/10
-              text-emerald-300
+              bg-black
+              text-white
             "
           >
             <Link2

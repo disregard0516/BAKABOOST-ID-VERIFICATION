@@ -132,7 +132,7 @@ export function AdminShell({
         relative
         min-h-screen
         overflow-x-hidden
-        bg-[#080d15]
+        bg-black
         text-white
       "
     >
@@ -199,11 +199,11 @@ export function AdminShell({
           left-0
           z-50
           hidden
-          w-[268px]
+          w-[288px]
           flex-col
           border-r
           border-white/[0.06]
-          bg-[#0a101a]/95
+          bg-black
           shadow-[20px_0_80px_rgba(0,0,0,0.15)]
           backdrop-blur-2xl
           lg:flex
@@ -214,7 +214,7 @@ export function AdminShell({
         <div
           className="
             flex
-            h-[82px]
+            h-[90px]
             shrink-0
             items-center
             border-b
@@ -245,8 +245,8 @@ export function AdminShell({
               className="
                 relative
                 flex
-                h-[42px]
-                w-[42px]
+                h-[48px]
+                w-[48px]
                 shrink-0
                 items-center
                 justify-center
@@ -264,7 +264,7 @@ export function AdminShell({
               "
             >
               <Fingerprint
-                className="h-5 w-5"
+                className="h-9 w-6"
                 strokeWidth={2}
                 aria-hidden="true"
               />
@@ -286,7 +286,7 @@ export function AdminShell({
               <div
                 className="
                   truncate
-                  text-[13px]
+                  text-[15px]
                   font-extrabold
                   tracking-[-0.025em]
                   text-white
@@ -299,7 +299,7 @@ export function AdminShell({
                 className="
                   mt-0.5
                   truncate
-                  text-[8px]
+                  text-[9px]
                   font-bold
                   uppercase
                   tracking-[0.15em]
@@ -381,8 +381,8 @@ export function AdminShell({
 
           <AdminNavItem
             icon={Users}
-            label="Reviewers"
-            description="Reviewer management"
+            label="Team & Access"
+            description="Team management"
             disabled
           />
 
@@ -411,7 +411,7 @@ export function AdminShell({
                 border
                 border-white/[0.06]
                 bg-white/[0.025]
-                p-3
+                p-3.5
                 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]
               "
             >
@@ -419,15 +419,15 @@ export function AdminShell({
                 className="
                   flex
                   items-center
-                  gap-3
+                  gap-3.5
                 "
               >
                 <div
                   className="
                     relative
                     flex
-                    h-10
-                    w-10
+                    h-[52px]
+                    w-[52px]
                     shrink-0
                     items-center
                     justify-center
@@ -464,7 +464,7 @@ export function AdminShell({
                   <div
                     className="
                       truncate
-                      text-[10px]
+                      text-[12px]
                       font-bold
                       text-slate-300
                     "
@@ -478,7 +478,7 @@ export function AdminShell({
                       flex
                       items-center
                       gap-1.5
-                      text-[8px]
+                      text-[9px]
                       font-medium
                       text-slate-600
                     "
@@ -511,14 +511,14 @@ export function AdminShell({
               className="
                 group
                 flex
-                min-h-11
+                min-h-[48px]
                 w-full
                 items-center
                 gap-3
                 rounded-[13px]
                 px-3
                 py-2.5
-                text-xs
+                text-[15px]
                 font-semibold
                 text-slate-500
                 outline-none
@@ -605,7 +605,7 @@ export function AdminShell({
               flex-col
               border-r
               border-white/[0.07]
-              bg-[#0a101a]
+              bg-black
               p-4
               shadow-[30px_0_100px_rgba(0,0,0,0.45)]
             "
@@ -632,8 +632,8 @@ export function AdminShell({
                 <div
                   className="
                     flex
-                    h-10
-                    w-10
+                    h-[52px]
+                    w-[52px]
                     items-center
                     justify-center
                     rounded-[13px]
@@ -652,7 +652,7 @@ export function AdminShell({
                 <div>
                   <div
                     className="
-                      text-xs
+                      text-lg
                       font-extrabold
                       tracking-[-0.02em]
                       text-white
@@ -664,7 +664,7 @@ export function AdminShell({
                   <div
                     className="
                       mt-0.5
-                      text-[7px]
+                      text-[9px]
                       font-bold
                       uppercase
                       tracking-[0.14em]
@@ -685,8 +685,8 @@ export function AdminShell({
                 }}
                 className="
                   flex
-                  h-10
-                  w-10
+                  h-[52px]
+                  w-[52px]
                   items-center
                   justify-center
                   rounded-[12px]
@@ -765,7 +765,7 @@ export function AdminShell({
                   border
                   border-white/[0.055]
                   bg-white/[0.025]
-                  p-3
+                  p-3.5
                 "
               >
                 <div
@@ -777,7 +777,7 @@ export function AdminShell({
                     justify-center
                     rounded-[11px]
                     bg-violet-500/10
-                    text-[9px]
+                    text-[12px]
                     font-bold
                     text-violet-300
                   "
@@ -788,7 +788,7 @@ export function AdminShell({
                 <div>
                   <div
                     className="
-                      text-[10px]
+                      text-[12px]
                       font-semibold
                       text-slate-300
                     "
@@ -802,7 +802,7 @@ export function AdminShell({
                       flex
                       items-center
                       gap-1.5
-                      text-[8px]
+                      text-[12px]
                       text-emerald-500
                     "
                   >
@@ -833,7 +833,7 @@ export function AdminShell({
                   rounded-[13px]
                   px-3
                   py-3
-                  text-xs
+                  text-[15px]
                   font-semibold
                   text-slate-500
                   transition
@@ -864,7 +864,7 @@ export function AdminShell({
           relative
           z-10
           min-h-screen
-          lg:pl-[268px]
+          lg:pl-[288px]
         "
       >
         {/* Header */}
@@ -875,13 +875,13 @@ export function AdminShell({
             top-0
             z-40
             flex
-            h-[82px]
+            h-[90px]
             items-center
             justify-between
             border-b
             border-white/[0.055]
-            bg-[#0b121c]/90
-            px-4
+            bg-black/95
+            px-5
             backdrop-blur-2xl
             sm:px-6
             xl:px-8
@@ -903,8 +903,8 @@ export function AdminShell({
               className="
                 mr-3
                 flex
-                h-10
-                w-10
+                h-[52px]
+                w-[52px]
                 shrink-0
                 items-center
                 justify-center
@@ -957,11 +957,11 @@ export function AdminShell({
                 className="
                   mt-1
                   truncate
-                  text-[13px]
+                  text-[15px]
                   font-bold
                   tracking-[-0.02em]
                   text-slate-100
-                  sm:text-sm
+                  sm:text-xl
                 "
               >
                 {getWorkspaceTitle(pathname)}
@@ -989,8 +989,8 @@ export function AdminShell({
               className="
                 group
                 flex
-                h-10
-                w-10
+                h-[52px]
+                w-[52px]
                 items-center
                 justify-center
                 rounded-[12px]
@@ -1039,8 +1039,8 @@ export function AdminShell({
                 className="
                   relative
                   flex
-                  h-8
-                  w-8
+                  h-[52px]
+                  w-[52px]
                   items-center
                   justify-center
                   rounded-[10px]
@@ -1072,7 +1072,7 @@ export function AdminShell({
               <div>
                 <div
                   className="
-                    text-[9px]
+                    text-[11px]
                     font-semibold
                     text-slate-300
                   "
@@ -1086,7 +1086,7 @@ export function AdminShell({
                     flex
                     items-center
                     gap-1.5
-                    text-[7px]
+                    text-[8px]
                     font-bold
                     uppercase
                     tracking-[0.08em]
@@ -1166,7 +1166,7 @@ function NavSectionLabel({
     <div
       className="
         px-3
-        pb-2.5
+        pb-3
         text-[7px]
         font-extrabold
         uppercase
@@ -1229,15 +1229,15 @@ function AdminNavItem({
         relative
         mb-1
         flex
-        min-h-[52px]
+        min-h-[58px]
         w-full
         items-center
-        gap-3
+        gap-3.5
         overflow-hidden
         rounded-[14px]
         border
-        px-3
-        py-2.5
+        px-3.5
+        py-3
         text-left
         outline-none
         transition
@@ -1267,12 +1267,12 @@ function AdminNavItem({
       <div
         className={`
           flex
-          h-8
-          w-8
+          h-9
+          w-9
           shrink-0
           items-center
           justify-center
-          rounded-[10px]
+          rounded-[11px]
           transition
           duration-200
           ${
@@ -1291,7 +1291,7 @@ function AdminNavItem({
         `}
       >
         <Icon
-          className="h-[15px] w-[15px]"
+          className="h-[17px] w-[17px]"
           strokeWidth={1.9}
           aria-hidden="true"
         />
@@ -1302,7 +1302,7 @@ function AdminNavItem({
         <div
           className={`
             truncate
-            text-[10px]
+            text-[12px]
             font-bold
             ${
               active
@@ -1319,9 +1319,9 @@ function AdminNavItem({
             className="
               mt-0.5
               truncate
-              text-[8px]
+              text-[9px]
               font-medium
-              text-slate-700
+              text-slate-500
             "
           >
             {description}
@@ -1406,15 +1406,15 @@ function MobileAdminLink({
         px-3
         py-3
         text-left
-        text-xs
+        text-[15px]
         font-semibold
         transition
         duration-200
         ${
           active
             ? `
-                border-violet-400/[0.08]
-                bg-violet-500/[0.10]
+                border-violet-400/[0.12]
+                bg-violet-500/[0.13]
                 text-violet-200
               `
             : `
@@ -1434,7 +1434,7 @@ function MobileAdminLink({
           w-8
           items-center
           justify-center
-          rounded-[10px]
+          rounded-[11px]
           ${
             active
               ? `
