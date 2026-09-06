@@ -169,6 +169,15 @@ def _get_cloudflare_access_team_domain() -> str:
 
 
 def _get_cloudflare_access_audience() -> str:
+    """
+    Return the ordinary administrator Access application
+    audience.
+
+    Assertions for this audience establish normal
+    administrator identity only. They do not prove local MFA
+    step-up assurance.
+    """
+
     audience = (
         settings
         .cloudflare_access_audience
@@ -178,6 +187,31 @@ def _get_cloudflare_access_audience() -> str:
     if not audience:
         raise AdminAuthenticationError(
             "Administrator authentication "
+            "audience is not configured."
+        )
+
+    return audience
+
+
+def _get_cloudflare_access_step_up_audience() -> str:
+    """
+    Return the dedicated administrator step-up Access
+    application audience.
+
+    This audience must belong to the separately configured
+    Cloudflare Access application/policy that enforces the
+    required MFA ceremony.
+    """
+
+    audience = (
+        settings
+        .cloudflare_access_step_up_audience
+        .strip()
+    )
+
+    if not audience:
+        raise AdminAuthenticationError(
+            "Administrator step-up authentication "
             "audience is not configured."
         )
 
@@ -206,34 +240,71 @@ def _cloudflare_access_jwks_url(
 
 def _decode_cloudflare_access_token(
     raw_token: str,
+    *,
+    audience: str,
 ) -> dict[str, Any]:
     """
     Cryptographically validate a Cloudflare Access
-    application JWT.
+    application JWT for one explicitly selected audience.
 
     Validation includes:
 
     - RS256 signature;
     - dynamically retrieved Cloudflare Access signing key;
     - expected Zero Trust team issuer;
-    - expected Access application audience;
+    - explicitly supplied Access application audience;
     - expiration;
     - not-before;
     - issued-at;
     - immutable subject;
     - application-token type.
 
-    MFA is deliberately NOT inferred from this JWT.
-    Independent MFA is enforced by the Cloudflare Access
-    application/policy boundary.
+    This function deliberately does not infer MFA from JWT
+    claims. Step-up assurance is derived from successful
+    validation against the dedicated Access application
+    audience whose Cloudflare policy enforces MFA.
     """
+
+    if not isinstance(
+        raw_token,
+        str,
+    ):
+        raise AdminAuthenticationError(
+            "Invalid administrator "
+            "authentication."
+        )
+
+    normalized_token = (
+        raw_token.strip()
+    )
+
+    if not normalized_token:
+        raise AdminAuthenticationError(
+            "Invalid administrator "
+            "authentication."
+        )
+
+    if not isinstance(
+        audience,
+        str,
+    ):
+        raise AdminAuthenticationError(
+            "Administrator authentication "
+            "audience is not configured."
+        )
+
+    normalized_audience = (
+        audience.strip()
+    )
+
+    if not normalized_audience:
+        raise AdminAuthenticationError(
+            "Administrator authentication "
+            "audience is not configured."
+        )
 
     team_domain = (
         _get_cloudflare_access_team_domain()
-    )
-
-    audience = (
-        _get_cloudflare_access_audience()
     )
 
     issuer = (
@@ -261,17 +332,17 @@ def _decode_cloudflare_access_token(
         signing_key = (
             jwks_client
             .get_signing_key_from_jwt(
-                raw_token
+                normalized_token
             )
         )
 
         claims = jwt.decode(
-            raw_token,
+            normalized_token,
             signing_key.key,
             algorithms=[
                 "RS256",
             ],
-            audience=audience,
+            audience=normalized_audience,
             issuer=issuer,
             options={
                 "require": [
@@ -321,57 +392,22 @@ def _decode_cloudflare_access_token(
 
 
 # ============================================================
-# IDENTITY DECODING
+# IDENTITY NORMALIZATION
 # ============================================================
 
 
-def decode_admin_token(
-    raw_token: str,
+def _identity_from_claims(
+    claims: dict[str, Any],
 ) -> AdminIdentity:
     """
-    Validate an administrator identity assertion.
+    Convert validated external claims into the normalized
+    immutable identity used by local administrator
+    authorization.
 
-    Production uses a Cloudflare Access application JWT.
-
-    Development may use the dedicated local token only when
-    development authentication is explicitly enabled.
-
-    External authentication never grants BAKABOOST
-    administrator authorization by itself.
+    Authentication provider claims remain available on the
+    identity object for callers that need non-secret metadata,
+    but they do not grant authorization by themselves.
     """
-
-    if not isinstance(
-        raw_token,
-        str,
-    ):
-        raise AdminAuthenticationError(
-            "Invalid administrator "
-            "authentication."
-        )
-
-    normalized_token = (
-        raw_token.strip()
-    )
-
-    if not normalized_token:
-        raise AdminAuthenticationError(
-            "Invalid administrator "
-            "authentication."
-        )
-
-    if _development_admin_auth_enabled():
-        claims = (
-            _decode_development_admin_token(
-                normalized_token
-            )
-        )
-
-    else:
-        claims = (
-            _decode_cloudflare_access_token(
-                normalized_token
-            )
-        )
 
     subject = claims.get(
         "sub"
@@ -419,6 +455,125 @@ def decode_admin_token(
         subject=normalized_subject,
         email=email,
         claims=claims,
+    )
+
+
+# ============================================================
+# ORDINARY ADMINISTRATOR IDENTITY DECODING
+# ============================================================
+
+
+def decode_admin_token(
+    raw_token: str,
+) -> AdminIdentity:
+    """
+    Validate an administrator identity assertion.
+
+    Production/staging use the ordinary Cloudflare Access
+    administrator application audience.
+
+    Development may use the dedicated local token only when
+    development authentication is explicitly enabled.
+
+    This function never grants MFA step-up assurance.
+    """
+
+    if not isinstance(
+        raw_token,
+        str,
+    ):
+        raise AdminAuthenticationError(
+            "Invalid administrator "
+            "authentication."
+        )
+
+    normalized_token = (
+        raw_token.strip()
+    )
+
+    if not normalized_token:
+        raise AdminAuthenticationError(
+            "Invalid administrator "
+            "authentication."
+        )
+
+    if _development_admin_auth_enabled():
+        claims = (
+            _decode_development_admin_token(
+                normalized_token
+            )
+        )
+
+    else:
+        claims = (
+            _decode_cloudflare_access_token(
+                normalized_token,
+                audience=(
+                    _get_cloudflare_access_audience()
+                ),
+            )
+        )
+
+    return _identity_from_claims(
+        claims
+    )
+
+
+# ============================================================
+# ADMINISTRATOR STEP-UP IDENTITY DECODING
+# ============================================================
+
+
+def decode_admin_step_up_token(
+    raw_token: str,
+) -> AdminIdentity:
+    """
+    Validate an administrator assertion against the dedicated
+    Cloudflare Access step-up application audience.
+
+    This function intentionally does not fall back to the
+    ordinary administrator Access audience.
+
+    It also does not use the development bearer-token
+    mechanism. Local development already has a separately
+    controlled sensitive-operation bypass.
+
+    Successful validation proves only that Cloudflare issued
+    an application JWT for the dedicated step-up Access
+    application. The Access application/policy itself must be
+    configured to enforce the required MFA ceremony.
+    """
+
+    if not isinstance(
+        raw_token,
+        str,
+    ):
+        raise AdminAuthenticationError(
+            "Invalid administrator "
+            "step-up authentication."
+        )
+
+    normalized_token = (
+        raw_token.strip()
+    )
+
+    if not normalized_token:
+        raise AdminAuthenticationError(
+            "Invalid administrator "
+            "step-up authentication."
+        )
+
+    claims = (
+        _decode_cloudflare_access_token(
+            normalized_token,
+            audience=(
+                _get_cloudflare_access_step_up_audience()
+            ),
+        )
+    )
+
+    return _identity_from_claims(
+        claims
     )
 
 

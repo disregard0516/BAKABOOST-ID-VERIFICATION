@@ -33,6 +33,10 @@ import {
   useState,
 } from "react";
 
+import {
+  logoutAdminSession,
+} from "@/lib/admin-api";
+
 
 interface AdminShellProps {
   children: ReactNode;
@@ -106,7 +110,25 @@ export function AdminShell({
     router.push(href);
   }
 
+  async function handleAdminLogout():
+    Promise<void> {
+    setMobileOpen(false);
 
+    try {
+      await logoutAdminSession();
+    } finally {
+      /*
+      * Cloudflare Access owns this endpoint, not Next.js.
+      * A full browser navigation is required so Cloudflare
+      * can terminate the Access session at the edge.
+      */
+
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.href =
+        "/cdn-cgi/access/logout";
+    }
+  }
+  
   const overviewActive =
     pathname === "/admin";
 
@@ -506,8 +528,11 @@ export function AdminShell({
             </div>
 
 
-            <a
-              href="/auth/logout"
+            <button
+              type="button"
+              onClick={() => {
+                void handleAdminLogout();
+              }}
               className="
                 group
                 flex
@@ -558,7 +583,7 @@ export function AdminShell({
                 "
                 aria-hidden="true"
               />
-            </a>
+            </button>
           </div>
         </nav>
       </aside>
@@ -822,8 +847,11 @@ export function AdminShell({
               </div>
 
 
-              <a
-                href="/auth/logout"
+              <button
+                type="button"
+                onClick={() => {
+                  void handleAdminLogout();
+                }}
                 className="
                   flex
                   min-h-11
@@ -848,7 +876,7 @@ export function AdminShell({
                 />
 
                 End admin session
-              </a>
+              </button>
             </div>
           </aside>
         </div>

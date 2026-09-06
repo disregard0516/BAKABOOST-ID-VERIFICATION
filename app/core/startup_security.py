@@ -158,6 +158,25 @@ def validate_runtime_security() -> None:
             "Cloudflare Access audience is missing."
         )
 
+    if (
+        not settings
+        .cloudflare_access_step_up_audience
+        .strip()
+    ):
+        raise UnsafeProductionConfiguration(
+            "Cloudflare Access step-up audience is missing."
+        )
+
+    if (
+        settings.cloudflare_access_step_up_audience.strip()
+        == settings.cloudflare_access_audience.strip()
+    ):
+        raise UnsafeProductionConfiguration(
+            "Cloudflare Access step-up audience must be "
+            "different from the normal administrator "
+            "Access audience."
+        )
+
     #
     # Production rate limiting is mandatory.
     #

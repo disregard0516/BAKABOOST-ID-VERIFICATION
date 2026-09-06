@@ -55,7 +55,16 @@ class Settings(BaseSettings):
     # administrator Access application.
     cloudflare_access_audience: str = ""
 
-        # --------------------------------------------------------
+    # Dedicated Cloudflare Access Application Audience (AUD)
+    # used only for administrator step-up authentication.
+    #
+    # This MUST belong to a separate Access application/policy
+    # that enforces the required MFA ceremony. The ordinary
+    # administrator Access audience must never be accepted as
+    # step-up assurance.
+    cloudflare_access_step_up_audience: str = ""
+
+    # --------------------------------------------------------
     # Administrator session security
     # --------------------------------------------------------
 

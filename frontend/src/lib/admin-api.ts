@@ -38,9 +38,6 @@ import type {
 const DEFAULT_API_BASE_URL =
   "http://localhost:8000/api";
 
-const AUTH0_ACCESS_TOKEN_ENDPOINT =
-  "/auth/access-token";
-
 const ADMIN_SESSION_PATH =
   "/admin/auth/session";
 
@@ -73,23 +70,6 @@ export class AdminApiError extends Error {
       AdminApiError.prototype,
     );
   }
-}
-
-
-/* ============================================================
-   AUTH0 TYPES
-============================================================ */
-
-interface Auth0AccessTokenResponse {
-  token?: unknown;
-  accessToken?: unknown;
-  access_token?: unknown;
-
-  expires_at?: unknown;
-  expires_in?: unknown;
-
-  token_type?: unknown;
-  scope?: unknown;
 }
 
 
@@ -201,28 +181,6 @@ function getApiUrl(
    RESPONSE HELPERS
 ============================================================ */
 
-function extractAccessToken(
-  payload: Auth0AccessTokenResponse,
-): string | null {
-  const possibleTokens = [
-    payload.token,
-    payload.accessToken,
-    payload.access_token,
-  ];
-
-  for (const value of possibleTokens) {
-    if (
-      typeof value === "string" &&
-      value.trim().length > 0
-    ) {
-      return value.trim();
-    }
-  }
-
-  return null;
-}
-
-
 function extractCsrfToken(
   payload: AdminSessionResponse,
 ): string | null {
@@ -277,84 +235,6 @@ async function getResponseErrorMessage(
   }
 }
 
-
-/* ============================================================
-   AUTH0 ACCESS TOKEN
-============================================================ */
-
-async function getAdminAccessToken():
-  Promise<string> {
-  let response: Response;
-
-  try {
-    response = await fetch(
-      AUTH0_ACCESS_TOKEN_ENDPOINT,
-      {
-        method: "GET",
-        credentials: "include",
-        cache: "no-store",
-
-        headers: {
-          Accept: "application/json",
-        },
-      },
-    );
-  } catch {
-    throw new AdminApiError(
-      "Unable to reach the administrator authentication service.",
-      0,
-    );
-  }
-
-  if (!response.ok) {
-    if (
-      response.status === 401 ||
-      response.status === 403
-    ) {
-      clearAdminSessionState();
-      signalAdminSessionExpired();
-    }
-
-    throw new AdminApiError(
-      response.status === 401
-        ? "Administrator sign-in has expired. Please sign in again."
-        : response.status === 403
-          ? "Administrator authentication is not authorized."
-          : "Unable to verify administrator authentication.",
-      response.status,
-    );
-  }
-
-  let payload: Auth0AccessTokenResponse;
-
-  try {
-    payload =
-      (await response.json()) as
-        Auth0AccessTokenResponse;
-  } catch {
-    throw new AdminApiError(
-      "Authentication service returned an invalid response.",
-      500,
-    );
-  }
-
-  const token =
-    extractAccessToken(payload);
-
-  if (!token) {
-    clearAdminSessionState();
-    signalAdminSessionExpired();
-
-    throw new AdminApiError(
-      "Administrator authentication could not be verified. Please sign in again.",
-      401,
-    );
-  }
-
-  return token;
-}
-
-
 /* ============================================================
    EXISTING BAKABOOST SESSION
 ============================================================ */
@@ -385,11 +265,15 @@ async function restoreAdminSession():
     );
   }
 
-  /*
-   * 401 here is normal when this browser has an Auth0
-   * session but has not yet exchanged it for a BAKABOOST
-   * server-managed session.
-   */
+ /*
+  * 401 is normal when no valid BAKABOOST administrator
+  * session exists yet.
+  *
+  * If the request is running behind Cloudflare Access,
+  * initializeAdminSession() will next attempt to exchange the
+  * Cloudflare-authenticated identity for a local session.
+ */
+
   if (response.status === 401) {
     return false;
   }
@@ -443,21 +327,35 @@ async function restoreAdminSession():
 async function establishAdminSession():
   Promise<void> {
   /*
-   * The Auth0 credential is used only for this exchange.
+   * Production:
    *
-   * It is not placed in localStorage/sessionStorage and is not
-   * attached to normal administrator API requests.
+   * The browser posts directly to the BAKABOOST API. The
+   * request passes through Cloudflare Access, which supplies
+   * Cf-Access-Jwt-Assertion at the protected origin boundary.
+   *
+   * Local development:
+   *
+   * The browser calls the same-origin Next.js development
+   * bridge. That server-only route creates the short-lived
+   * development assertion and exchanges it with FastAPI.
+   *
+   * Browser JavaScript never receives a Cloudflare Access JWT,
+   * development bearer token, or development signing secret.
    */
-  const accessToken =
-    await getAdminAccessToken();
+  const development =
+    process.env.NODE_ENV === "development";
+
+  const sessionUrl = development
+    ? "/api/admin/dev-session"
+    : getApiUrl(
+        ADMIN_SESSION_PATH,
+      );
 
   let response: Response;
 
   try {
     response = await fetch(
-      getApiUrl(
-        ADMIN_SESSION_PATH,
-      ),
+      sessionUrl,
       {
         method: "POST",
 
@@ -466,9 +364,6 @@ async function establishAdminSession():
 
         headers: {
           Accept: "application/json",
-
-          Authorization:
-            `Bearer ${accessToken}`,
         },
       },
     );
@@ -526,7 +421,6 @@ async function establishAdminSession():
   adminCsrfToken = csrfToken;
 }
 
-
 /* ============================================================
    SESSION INITIALIZATION
 ============================================================ */
@@ -549,8 +443,8 @@ async function initializeAdminSession():
   /*
    * No BAKABOOST session exists.
    *
-   * Exchange the authenticated Auth0 identity for a new
-   * server-managed application session.
+   * Establish a new server-managed session from the external
+   * identity already authenticated at the origin boundary.
    */
   await establishAdminSession();
 }
@@ -629,8 +523,8 @@ async function adminFetch<T>(
     );
 
   /*
-   * Normal administrator API calls deliberately do NOT carry
-   * the Auth0 bearer token.
+   * Normal administrator API calls never carry an external
+   * identity-provider bearer token.
    *
    * Authentication comes from the FastAPI HttpOnly session
    * cookie.
@@ -710,7 +604,7 @@ async function adminFetch<T>(
 
     if (response.status === 401) {
       /*
-       * Do NOT silently exchange Auth0 credentials for a new
+       * Do NOT silently attach external identity-provider credentials to a new
        * session here.
        *
        * An idle/expired/revoked administrator session should

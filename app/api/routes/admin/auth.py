@@ -30,6 +30,7 @@ from app.db.models.admin import Admin
 from app.db.session import get_db_session
 from app.services.admin.auth import (
     AdminAuthenticationError,
+    decode_admin_step_up_token,
     decode_admin_token,
     get_admin_for_identity,
 )
@@ -44,6 +45,7 @@ from app.services.admin.session_service import (
     revoke_admin_session,
     revoke_admin_session_by_id,
     rotate_admin_csrf_token,
+    rotate_admin_session,
     validate_admin_session_csrf,
 )
 from app.services.audit.service import (
@@ -94,6 +96,7 @@ def _is_production() -> bool:
         == "production"
     )
 
+
 def _client_ip(
     request: Request,
 ) -> str | None:
@@ -127,10 +130,15 @@ def _request_id(
         None,
     )
 
-    if not isinstance(value, str):
+    if not isinstance(
+        value,
+        str,
+    ):
         return None
 
-    normalized = value.strip()
+    normalized = (
+        value.strip()
+    )
 
     return normalized or None
 
@@ -151,18 +159,25 @@ async def _record_denied_auth_event(
     reason: str,
     admin: Admin | None = None,
     admin_session_id: UUID | None = None,
-    metadata: Mapping[str, Any] | None = None,
+    metadata: Mapping[
+        str,
+        Any,
+    ]
+    | None = None,
 ) -> None:
     """
-    Persist an authentication/security denial after the
-    caller has rolled back the failed protected operation.
+    Persist an authentication/security denial after the caller
+    has rolled back the failed protected operation.
 
     Authentication credentials, session tokens, CSRF tokens,
-    OIDC claims and other secrets must never be placed in
-    audit metadata.
+    identity assertions and other secrets must never be placed
+    in audit metadata.
     """
 
-    event_metadata: dict[str, Any] = {
+    event_metadata: dict[
+        str,
+        Any,
+    ] = {
         "reason": reason,
     }
 
@@ -188,7 +203,9 @@ async def _record_denied_auth_event(
         ip_address=_client_ip(
             request
         ),
-        admin_session_id=admin_session_id,
+        admin_session_id=(
+            admin_session_id
+        ),
         request_id=_request_id(
             request
         ),
@@ -238,18 +255,22 @@ async def _persist_invalid_admin_session(
         admin_session_id=(
             exc.admin_session_id
         ),
-        admin_id=exc.admin_id,
+        admin_id=(
+            exc.admin_id
+        ),
         reason=reason,
     )
 
     if reason == "absolute_expiry":
         action = (
-            AuditAction.ADMIN_SESSION_EXPIRED
+            AuditAction
+            .ADMIN_SESSION_EXPIRED
         )
 
     elif reason == "idle_timeout":
         action = (
-            AuditAction.ADMIN_SESSION_IDLE_EXPIRED
+            AuditAction
+            .ADMIN_SESSION_IDLE_EXPIRED
         )
 
     else:
@@ -296,7 +317,9 @@ def _set_admin_cookies(
     separate browser-readable CSRF cookie.
     """
 
-    secure = bool(settings.cookie_secure)
+    secure = bool(
+        settings.cookie_secure
+    )
 
     if _is_production():
         secure = True
@@ -323,6 +346,7 @@ def _set_admin_cookies(
     #
     # The raw value is never stored in PostgreSQL.
     #
+
     response.set_cookie(
         key=session_cookie_name,
         value=created.raw_token,
@@ -346,6 +370,7 @@ def _set_admin_cookies(
     #
     # It is NOT an authentication credential.
     #
+
     response.set_cookie(
         key=csrf_cookie_name,
         value=created.csrf_token,
@@ -367,13 +392,17 @@ def _clear_admin_cookies(
     Remove both administrator browser cookies.
     """
 
-    secure = bool(settings.cookie_secure)
+    secure = bool(
+        settings.cookie_secure
+    )
 
     if _is_production():
         secure = True
 
     response.delete_cookie(
-        key=get_admin_session_cookie_name(),
+        key=(
+            get_admin_session_cookie_name()
+        ),
         path="/",
         secure=secure,
         httponly=True,
@@ -381,7 +410,9 @@ def _clear_admin_cookies(
     )
 
     response.delete_cookie(
-        key=get_admin_csrf_cookie_name(),
+        key=(
+            get_admin_csrf_cookie_name()
+        ),
         path="/",
         secure=secure,
         httponly=False,
@@ -402,7 +433,9 @@ def _admin_payload(
     return {
         "id": str(admin.id),
         "email": admin.email,
-        "display_name": admin.display_name,
+        "display_name": (
+            admin.display_name
+        ),
         "role": admin.role.value,
     }
 
@@ -414,7 +447,9 @@ def _admin_payload(
 
 @router.post(
     "/session",
-    status_code=status.HTTP_201_CREATED,
+    status_code=(
+        status.HTTP_201_CREATED
+    ),
 )
 async def establish_admin_session(
     request: Request,
@@ -424,7 +459,9 @@ async def establish_admin_session(
     cloudflare_access_assertion: Annotated[
         str | None,
         Header(
-            alias="Cf-Access-Jwt-Assertion",
+            alias=(
+                "Cf-Access-Jwt-Assertion"
+            ),
         ),
     ] = None,
 ) -> dict[str, object]:
@@ -445,12 +482,12 @@ async def establish_admin_session(
     subject must match an explicitly provisioned and active
     local Admin row.
 
-    Cloudflare Access application JWTs do not provide a
-    trustworthy equivalent of Auth0 auth_time/AMR assurance.
-    Therefore this normal session-establishment endpoint does
-    not mark MFA or phishing-resistant MFA as locally
-    verified. Sensitive operations remain fail-closed until
-    explicit step-up assurance is established separately.
+    Ordinary Cloudflare Access application JWTs do not prove
+    that a fresh MFA ceremony occurred at session creation.
+
+    Therefore this endpoint creates only baseline local
+    administrator assurance. Sensitive operations remain
+    fail-closed until the dedicated step-up flow succeeds.
     """
 
     environment = (
@@ -461,60 +498,64 @@ async def establish_admin_session(
 
     development_auth = (
         environment == "development"
-        and settings.dev_admin_auth_enabled
+        and settings
+        .dev_admin_auth_enabled
     )
 
     raw_assertion: str | None = None
     auth_method: str
 
     # --------------------------------------------------------
-    # Resolve the external authentication assertion
+    # Resolve external authentication assertion
     # --------------------------------------------------------
 
     if development_auth:
-        #
-        # Dedicated local-development authentication only.
-        #
         if credentials is not None:
             candidate = (
-                credentials.credentials
+                credentials
+                .credentials
                 .strip()
             )
 
             if candidate:
-                raw_assertion = candidate
+                raw_assertion = (
+                    candidate
+                )
 
         auth_method = "development"
 
         if raw_assertion is None:
-            await _record_denied_auth_event(
-                db,
-                request=request,
-                action=(
-                    AuditAction
-                    .ADMIN_AUTH_DENIED
-                ),
-                reason=(
-                    "missing_development_"
-                    "credentials"
-                ),
+            await (
+                _record_denied_auth_event(
+                    db,
+                    request=request,
+                    action=(
+                        AuditAction
+                        .ADMIN_AUTH_DENIED
+                    ),
+                    reason=(
+                        "missing_development_"
+                        "credentials"
+                    ),
+                )
             )
 
             raise HTTPException(
                 status_code=(
-                    status.HTTP_401_UNAUTHORIZED
+                    status
+                    .HTTP_401_UNAUTHORIZED
                 ),
-                detail="Authentication required.",
+                detail=(
+                    "Authentication required."
+                ),
                 headers={
-                    "WWW-Authenticate": "Bearer",
+                    "WWW-Authenticate": (
+                        "Bearer"
+                    ),
                 },
             )
 
     else:
-        #
-        # Production/staging external administrator
-        # authentication must come from Cloudflare Access.
-        #
         if isinstance(
             cloudflare_access_assertion,
             str,
@@ -525,113 +566,125 @@ async def establish_admin_session(
             )
 
             if candidate:
-                raw_assertion = candidate
+                raw_assertion = (
+                    candidate
+                )
 
-        auth_method = "cloudflare_access"
+        auth_method = (
+            "cloudflare_access"
+        )
 
         if raw_assertion is None:
-            await _record_denied_auth_event(
-                db,
-                request=request,
-                action=(
-                    AuditAction
-                    .ADMIN_AUTH_DENIED
-                ),
-                reason=(
-                    "missing_cloudflare_"
-                    "access_assertion"
-                ),
+            await (
+                _record_denied_auth_event(
+                    db,
+                    request=request,
+                    action=(
+                        AuditAction
+                        .ADMIN_AUTH_DENIED
+                    ),
+                    reason=(
+                        "missing_cloudflare_"
+                        "access_assertion"
+                    ),
+                )
             )
 
             raise HTTPException(
                 status_code=(
-                    status.HTTP_401_UNAUTHORIZED
+                    status
+                    .HTTP_401_UNAUTHORIZED
                 ),
-                detail="Authentication required.",
+                detail=(
+                    "Authentication required."
+                ),
             )
 
     admin: Admin | None = None
-    created: CreatedAdminSession | None = None
+    created: (
+        CreatedAdminSession
+        | None
+    ) = None
 
     try:
         # ----------------------------------------------------
         # Cryptographically verify external identity
         # ----------------------------------------------------
 
-        identity = decode_admin_token(
-            raw_assertion
+        identity = (
+            decode_admin_token(
+                raw_assertion
+            )
         )
 
         # ----------------------------------------------------
         # Exact local administrator binding
         # ----------------------------------------------------
 
-        admin = await get_admin_for_identity(
-            db,
-            identity=identity,
+        admin = (
+            await get_admin_for_identity(
+                db,
+                identity=identity,
+            )
         )
 
-        #
-        # This timestamp represents establishment of the
-        # BAKABOOST session from a valid external assertion.
-        #
-        # It is deliberately NOT treated as proof that MFA or
-        # interactive reauthentication occurred at this exact
-        # instant.
-        #
-        now = datetime.now(UTC)
-
-        # ----------------------------------------------------
-        # Authentication assurance
-        # ----------------------------------------------------
-
-        #
-        # Do not infer MFA from Cloudflare Access application
-        # JWT claims. Independent MFA belongs to the Access
-        # policy boundary, and explicit local step-up
-        # assurance is handled separately.
-        #
-        mfa_verified_at = None
-        phishing_resistant_verified_at = None
-
-        # ----------------------------------------------------
-        # Create server-managed session
-        # ----------------------------------------------------
-
-        created = await create_admin_session(
-            db,
-            admin=admin,
-            authenticated_at=now,
-            mfa_verified_at=mfa_verified_at,
-            phishing_resistant_verified_at=(
-                phishing_resistant_verified_at
-            ),
-            auth_method=auth_method,
-            ip_address=_client_ip(
-                request
-            ),
-            user_agent=_user_agent(
-                request
-            ),
+        now = datetime.now(
+            UTC
         )
 
         # ----------------------------------------------------
-        # Audit successful authentication
+        # Normal session establishment does not fabricate MFA
+        # assurance.
+        # ----------------------------------------------------
+
+        created = (
+            await create_admin_session(
+                db,
+                admin=admin,
+                authenticated_at=now,
+                mfa_verified_at=None,
+                phishing_resistant_verified_at=(
+                    None
+                ),
+                auth_method=auth_method,
+                ip_address=(
+                    _client_ip(
+                        request
+                    )
+                ),
+                user_agent=(
+                    _user_agent(
+                        request
+                    )
+                ),
+            )
+        )
+
+        # ----------------------------------------------------
+        # Audit authentication
         # ----------------------------------------------------
 
         await record_audit_event(
             db,
-            actor_type=ActorType.ADMIN.value,
-            actor_id=str(admin.id),
+            actor_type=(
+                ActorType.ADMIN.value
+            ),
+            actor_id=str(
+                admin.id
+            ),
             action=(
                 AuditAction
                 .ADMIN_AUTH_SUCCEEDED
                 .value
             ),
             metadata={
-                "auth_method": auth_method,
+                "auth_method": (
+                    auth_method
+                ),
                 "mfa_verified": False,
-                "phishing_resistant_mfa": False,
+                "phishing_resistant_mfa": (
+                    False
+                ),
             },
             ip_address=_client_ip(
                 request
@@ -654,15 +707,21 @@ async def establish_admin_session(
 
         await record_audit_event(
             db,
-            actor_type=ActorType.ADMIN.value,
-            actor_id=str(admin.id),
+            actor_type=(
+                ActorType.ADMIN.value
+            ),
+            actor_id=str(
+                admin.id
+            ),
             action=(
                 AuditAction
                 .ADMIN_SESSION_CREATED
                 .value
             ),
             metadata={
-                "auth_method": auth_method,
+                "auth_method": (
+                    auth_method
+                ),
             },
             ip_address=_client_ip(
                 request
@@ -679,10 +738,6 @@ async def establish_admin_session(
             outcome="success",
         )
 
-        # ----------------------------------------------------
-        # Persist session + audit atomically
-        # ----------------------------------------------------
-
         await db.commit()
 
     except AdminAuthenticationError as exc:
@@ -692,31 +747,39 @@ async def establish_admin_session(
             db,
             request=request,
             action=(
-                AuditAction.ADMIN_AUTH_DENIED
+                AuditAction
+                .ADMIN_AUTH_DENIED
             ),
-            reason="authentication_denied",
+            reason=(
+                "authentication_denied"
+            ),
             admin=admin,
         )
 
-        response_headers: dict[
-            str,
-            str,
-        ] | None = None
+        response_headers: (
+            dict[str, str]
+            | None
+        ) = None
 
         if development_auth:
             response_headers = {
-                "WWW-Authenticate": "Bearer",
+                "WWW-Authenticate": (
+                    "Bearer"
+                ),
             }
 
         raise HTTPException(
             status_code=(
-                status.HTTP_401_UNAUTHORIZED
+                status
+                .HTTP_401_UNAUTHORIZED
             ),
             detail=(
                 "Invalid administrator "
                 "authentication."
             ),
-            headers=response_headers,
+            headers=(
+                response_headers
+            ),
         ) from exc
 
     except AdminSessionError as exc:
@@ -726,17 +789,20 @@ async def establish_admin_session(
             db,
             request=request,
             action=(
-                AuditAction.ADMIN_AUTH_DENIED
+                AuditAction
+                .ADMIN_AUTH_DENIED
             ),
             reason=(
-                "session_establishment_failed"
+                "session_establishment_"
+                "failed"
             ),
             admin=admin,
         )
 
         raise HTTPException(
             status_code=(
-                status.HTTP_401_UNAUTHORIZED
+                status
+                .HTTP_401_UNAUTHORIZED
             ),
             detail=(
                 "Unable to establish "
@@ -744,18 +810,18 @@ async def establish_admin_session(
             ),
         ) from exc
 
-    # --------------------------------------------------------
-    # Successful path invariants
-    # --------------------------------------------------------
-
-    if admin is None or created is None:
+    if (
+        admin is None
+        or created is None
+    ):
         raise RuntimeError(
-            "Administrator session creation completed "
-            "without required result state."
+            "Administrator session creation "
+            "completed without required "
+            "result state."
         )
 
     # --------------------------------------------------------
-    # Set cookies only after DB commit succeeds
+    # Browser credentials are issued only after commit.
     # --------------------------------------------------------
 
     _set_admin_cookies(
@@ -769,13 +835,591 @@ async def establish_admin_session(
 
     return {
         "authenticated": True,
-        "admin": _admin_payload(
-            admin
+        "admin": (
+            _admin_payload(
+                admin
+            )
         ),
         "expires_at": (
-            created.session.expires_at.isoformat()
+            created
+            .session
+            .expires_at
+            .isoformat()
         ),
-        "csrf_token": created.csrf_token,
+        "csrf_token": (
+            created.csrf_token
+        ),
+    }
+
+
+# ============================================================
+# ADMINISTRATOR STEP-UP
+# ============================================================
+
+
+@router.post(
+    "/step-up",
+    status_code=status.HTTP_200_OK,
+)
+async def step_up_admin_session(
+    request: Request,
+    response: Response,
+    db: DatabaseSession,
+    admin_session_token: Annotated[
+        str | None,
+        Cookie(
+            alias=(
+                get_admin_session_cookie_name()
+            ),
+        ),
+    ] = None,
+    csrf_cookie: Annotated[
+        str | None,
+        Cookie(
+            alias=(
+                get_admin_csrf_cookie_name()
+            ),
+        ),
+    ] = None,
+    csrf_header: Annotated[
+        str | None,
+        Header(
+            alias=(
+                settings
+                .admin_csrf_header_name
+            ),
+        ),
+    ] = None,
+    cloudflare_access_assertion: Annotated[
+        str | None,
+        Header(
+            alias=(
+                "Cf-Access-Jwt-Assertion"
+            ),
+        ),
+    ] = None,
+) -> dict[str, object]:
+    """
+    Upgrade an existing BAKABOOST administrator session after
+    successful validation of the dedicated Cloudflare Access
+    step-up application assertion.
+
+    Security properties:
+
+    - requires an existing valid local administrator session;
+    - requires valid CSRF cookie/header binding;
+    - requires the dedicated Cloudflare step-up audience;
+    - immutable step-up subject must exactly match the current
+      local administrator subject;
+    - ordinary Cloudflare Access assertions are never accepted
+      as step-up proof;
+    - local MFA assurance timestamp is created only after this
+      dedicated validation boundary succeeds;
+    - phishing-resistant MFA is never fabricated;
+    - both authentication and CSRF credentials rotate;
+    - the same persistent session row is retained;
+    - absolute session expiry is not extended;
+    - database changes and audit events commit atomically;
+    - replacement browser credentials are issued only after
+      successful commit.
+
+    The dedicated Cloudflare Access application/policy must
+    itself enforce the required MFA ceremony.
+    """
+
+    if not admin_session_token:
+        raise HTTPException(
+            status_code=(
+                status
+                .HTTP_401_UNAUTHORIZED
+            ),
+            detail=(
+                "Authentication required."
+            ),
+        )
+
+    validated = None
+    rotated: (
+        CreatedAdminSession
+        | None
+    ) = None
+
+    try:
+        # ----------------------------------------------------
+        # Resolve existing local administrator session.
+        # ----------------------------------------------------
+        #
+        # Do not touch last_seen_at here before all step-up
+        # validation succeeds. Rotation will update session
+        # activity on the successful path.
+        #
+
+        validated = (
+            await get_valid_admin_session(
+                db,
+                raw_token=(
+                    admin_session_token
+                ),
+                touch=False,
+            )
+        )
+
+        # ----------------------------------------------------
+        # CSRF validation
+        # ----------------------------------------------------
+
+        validate_admin_session_csrf(
+            validated.session,
+            cookie_token=(
+                csrf_cookie
+            ),
+            header_token=(
+                csrf_header
+            ),
+        )
+
+        # ----------------------------------------------------
+        # Dedicated step-up assertion required.
+        # ----------------------------------------------------
+
+        raw_step_up_assertion: (
+            str | None
+        ) = None
+
+        if isinstance(
+            cloudflare_access_assertion,
+            str,
+        ):
+            candidate = (
+                cloudflare_access_assertion
+                .strip()
+            )
+
+            if candidate:
+                raw_step_up_assertion = (
+                    candidate
+                )
+
+        if raw_step_up_assertion is None:
+            raise AdminAuthenticationError(
+                "Missing administrator "
+                "step-up authentication."
+            )
+
+        # ----------------------------------------------------
+        # Cryptographically validate only against dedicated
+        # step-up audience.
+        # ----------------------------------------------------
+
+        step_up_identity = (
+            decode_admin_step_up_token(
+                raw_step_up_assertion
+            )
+        )
+
+        # ----------------------------------------------------
+        # Immutable identity binding.
+        # ----------------------------------------------------
+        #
+        # A valid step-up assertion for another administrator
+        # must never upgrade the current browser session.
+        #
+
+        current_subject = (
+            validated
+            .admin
+            .auth_subject
+        )
+
+        if not isinstance(
+            current_subject,
+            str,
+        ):
+            raise (
+                AdminAuthenticationError(
+                    "Administrator identity "
+                    "binding is invalid."
+                )
+            )
+
+        normalized_current_subject = (
+            current_subject.strip()
+        )
+
+        if (
+            not normalized_current_subject
+            or step_up_identity.subject
+            != normalized_current_subject
+        ):
+            raise (
+                AdminAuthenticationError(
+                    "Administrator step-up "
+                    "identity mismatch."
+                )
+            )
+
+        # ----------------------------------------------------
+        # Upgrade local assurance.
+        # ----------------------------------------------------
+        #
+        # This local timestamp represents the successful
+        # backend verification boundary of the dedicated
+        # step-up assertion.
+        #
+        # It is deliberately NOT copied from JWT iat.
+        #
+
+        now = datetime.now(
+            UTC
+        )
+
+        validated.session.authenticated_at = (
+            now
+        )
+
+        validated.session.mfa_verified_at = (
+            now
+        )
+
+        #
+        # Independent MFA may include methods such as TOTP.
+        # Therefore generic step-up success must not claim
+        # phishing-resistant authentication.
+        #
+        validated.session.phishing_resistant_verified_at = (
+            None
+        )
+
+        validated.session.auth_method = (
+            "cloudflare_access_step_up"
+        )
+
+        # ----------------------------------------------------
+        # Rotate both authentication and CSRF credentials.
+        # ----------------------------------------------------
+
+        rotated = (
+            await rotate_admin_session(
+                db,
+                admin_session=(
+                    validated.session
+                ),
+            )
+        )
+
+        # ----------------------------------------------------
+        # Audit successful step-up.
+        # ----------------------------------------------------
+
+        await record_audit_event(
+            db,
+            actor_type=(
+                ActorType.ADMIN.value
+            ),
+            actor_id=str(
+                validated.admin.id
+            ),
+            action=(
+                AuditAction
+                .ADMIN_STEP_UP_SUCCEEDED
+                .value
+            ),
+            metadata={
+                "auth_method": (
+                    "cloudflare_access_step_up"
+                ),
+                "mfa_verified": True,
+                "phishing_resistant_mfa": (
+                    False
+                ),
+            },
+            ip_address=_client_ip(
+                request
+            ),
+            admin_session_id=(
+                validated.session.id
+            ),
+            request_id=_request_id(
+                request
+            ),
+            user_agent=_user_agent(
+                request
+            ),
+            outcome="success",
+        )
+
+        # ----------------------------------------------------
+        # Audit credential rotation.
+        # ----------------------------------------------------
+
+        await record_audit_event(
+            db,
+            actor_type=(
+                ActorType.ADMIN.value
+            ),
+            actor_id=str(
+                validated.admin.id
+            ),
+            action=(
+                AuditAction
+                .ADMIN_SESSION_ROTATED
+                .value
+            ),
+            metadata={
+                "reason": (
+                    "step_up"
+                ),
+            },
+            ip_address=_client_ip(
+                request
+            ),
+            admin_session_id=(
+                validated.session.id
+            ),
+            request_id=_request_id(
+                request
+            ),
+            user_agent=_user_agent(
+                request
+            ),
+            outcome="success",
+        )
+
+        # ----------------------------------------------------
+        # Assurance upgrade + token rotation + audit commit
+        # atomically.
+        # ----------------------------------------------------
+
+        await db.commit()
+
+    except InvalidAdminSessionError as exc:
+        await db.rollback()
+
+        if validated is not None:
+            #
+            # Base session validation already succeeded.
+            # Therefore this is a CSRF validation failure.
+            #
+            await _record_denied_auth_event(
+                db,
+                request=request,
+                action=(
+                    AuditAction
+                    .ADMIN_CSRF_DENIED
+                ),
+                reason=(
+                    exc.reason
+                    or "csrf_validation_failed"
+                ),
+                admin=validated.admin,
+                admin_session_id=(
+                    validated.session.id
+                ),
+            )
+
+            raise HTTPException(
+                status_code=(
+                    status
+                    .HTTP_403_FORBIDDEN
+                ),
+                detail=(
+                    "Invalid request "
+                    "verification."
+                ),
+            ) from exc
+
+        if exc.requires_revocation:
+            await (
+                _persist_invalid_admin_session(
+                    db,
+                    request=request,
+                    exc=exc,
+                )
+            )
+
+        else:
+            await _record_denied_auth_event(
+                db,
+                request=request,
+                action=(
+                    AuditAction
+                    .ADMIN_AUTH_DENIED
+                ),
+                reason=(
+                    exc.reason
+                    or "invalid_admin_session"
+                ),
+            )
+
+        raise HTTPException(
+            status_code=(
+                status
+                .HTTP_401_UNAUTHORIZED
+            ),
+            detail=(
+                "Authentication required."
+            ),
+        ) from exc
+
+    except AdminAuthenticationError as exc:
+        await db.rollback()
+
+        reason = (
+            "step_up_authentication_denied"
+        )
+
+        #
+        # Record a more useful safe reason when the assertion
+        # was entirely absent. Never record the assertion.
+        #
+        if (
+            cloudflare_access_assertion
+            is None
+            or (
+                isinstance(
+                    cloudflare_access_assertion,
+                    str,
+                )
+                and not (
+                    cloudflare_access_assertion
+                    .strip()
+                )
+            )
+        ):
+            reason = (
+                "missing_cloudflare_"
+                "step_up_assertion"
+            )
+
+        elif (
+            validated is not None
+            and "mismatch"
+            in str(exc).lower()
+        ):
+            reason = (
+                "step_up_subject_mismatch"
+            )
+
+        await _record_denied_auth_event(
+            db,
+            request=request,
+            action=(
+                AuditAction
+                .ADMIN_STEP_UP_DENIED
+            ),
+            reason=reason,
+            admin=(
+                validated.admin
+                if validated
+                is not None
+                else None
+            ),
+            admin_session_id=(
+                validated.session.id
+                if validated
+                is not None
+                else None
+            ),
+        )
+
+        raise HTTPException(
+            status_code=(
+                status
+                .HTTP_403_FORBIDDEN
+            ),
+            detail=(
+                "Additional administrator "
+                "authentication failed."
+            ),
+        ) from exc
+
+    except AdminSessionError as exc:
+        await db.rollback()
+
+        await _record_denied_auth_event(
+            db,
+            request=request,
+            action=(
+                AuditAction
+                .ADMIN_STEP_UP_DENIED
+            ),
+            reason=(
+                "step_up_session_rotation_"
+                "failed"
+            ),
+            admin=(
+                validated.admin
+                if validated
+                is not None
+                else None
+            ),
+            admin_session_id=(
+                validated.session.id
+                if validated
+                is not None
+                else None
+            ),
+        )
+
+        raise HTTPException(
+            status_code=(
+                status
+                .HTTP_403_FORBIDDEN
+            ),
+            detail=(
+                "Unable to complete "
+                "administrator step-up."
+            ),
+        ) from exc
+
+    # --------------------------------------------------------
+    # Successful path invariants
+    # --------------------------------------------------------
+
+    if (
+        validated is None
+        or rotated is None
+    ):
+        raise RuntimeError(
+            "Administrator step-up completed "
+            "without required result state."
+        )
+
+    # --------------------------------------------------------
+    # New credentials are exposed only after the transaction
+    # has committed successfully.
+    # --------------------------------------------------------
+
+    _set_admin_cookies(
+        response,
+        created=rotated,
+    )
+
+    response.headers[
+        "Cache-Control"
+    ] = "no-store"
+
+    return {
+        "authenticated": True,
+        "step_up_verified": True,
+        "mfa_verified": True,
+        "phishing_resistant_mfa": (
+            False
+        ),
+        "admin": (
+            _admin_payload(
+                validated.admin
+            )
+        ),
+        "expires_at": (
+            rotated
+            .session
+            .expires_at
+            .isoformat()
+        ),
+        "csrf_token": (
+            rotated.csrf_token
+        ),
     }
 
 
@@ -794,7 +1438,9 @@ async def read_admin_session(
     admin_session_token: Annotated[
         str | None,
         Cookie(
-            alias=get_admin_session_cookie_name(),
+            alias=(
+                get_admin_session_cookie_name()
+            ),
         ),
     ] = None,
 ) -> dict[str, object]:
@@ -808,28 +1454,39 @@ async def read_admin_session(
 
     if not admin_session_token:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required.",
+            status_code=(
+                status
+                .HTTP_401_UNAUTHORIZED
+            ),
+            detail=(
+                "Authentication required."
+            ),
         )
 
     try:
-        validated = await get_valid_admin_session(
-            db,
-            raw_token=admin_session_token,
+        validated = (
+            await get_valid_admin_session(
+                db,
+                raw_token=(
+                    admin_session_token
+                ),
+            )
         )
 
-        csrf_token = await rotate_admin_csrf_token(
-            db,
-            admin_session=validated.session,
+        csrf_token = (
+            await rotate_admin_csrf_token(
+                db,
+                admin_session=(
+                    validated.session
+                ),
+            )
         )
-
-        # ----------------------------------------------------
-        # Audit successful session restoration
-        # ----------------------------------------------------
 
         await record_audit_event(
             db,
-            actor_type=ActorType.ADMIN.value,
+            actor_type=(
+                ActorType.ADMIN.value
+            ),
             actor_id=str(
                 validated.admin.id
             ),
@@ -860,10 +1517,12 @@ async def read_admin_session(
         await db.rollback()
 
         if exc.requires_revocation:
-            await _persist_invalid_admin_session(
-                db,
-                request=request,
-                exc=exc,
+            await (
+                _persist_invalid_admin_session(
+                    db,
+                    request=request,
+                    exc=exc,
+                )
             )
 
         else:
@@ -871,7 +1530,8 @@ async def read_admin_session(
                 db,
                 request=request,
                 action=(
-                    AuditAction.ADMIN_AUTH_DENIED
+                    AuditAction
+                    .ADMIN_AUTH_DENIED
                 ),
                 reason=(
                     exc.reason
@@ -880,21 +1540,26 @@ async def read_admin_session(
             )
 
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required.",
+            status_code=(
+                status
+                .HTTP_401_UNAUTHORIZED
+            ),
+            detail=(
+                "Authentication required."
+            ),
         ) from exc
 
-    # --------------------------------------------------------
-    # Refresh browser-readable CSRF material
-    # --------------------------------------------------------
-
-    secure = bool(settings.cookie_secure)
+    secure = bool(
+        settings.cookie_secure
+    )
 
     if _is_production():
         secure = True
 
     response.set_cookie(
-        key=get_admin_csrf_cookie_name(),
+        key=(
+            get_admin_csrf_cookie_name()
+        ),
         value=csrf_token,
         max_age=(
             settings
@@ -912,13 +1577,20 @@ async def read_admin_session(
 
     return {
         "authenticated": True,
-        "admin": _admin_payload(
-            validated.admin
+        "admin": (
+            _admin_payload(
+                validated.admin
+            )
         ),
         "expires_at": (
-            validated.session.expires_at.isoformat()
+            validated
+            .session
+            .expires_at
+            .isoformat()
         ),
-        "csrf_token": csrf_token,
+        "csrf_token": (
+            csrf_token
+        ),
     }
 
 
@@ -929,7 +1601,9 @@ async def read_admin_session(
 
 @router.delete(
     "/session",
-    status_code=status.HTTP_204_NO_CONTENT,
+    status_code=(
+        status.HTTP_204_NO_CONTENT
+    ),
 )
 async def destroy_admin_session(
     request: Request,
@@ -938,19 +1612,26 @@ async def destroy_admin_session(
     admin_session_token: Annotated[
         str | None,
         Cookie(
-            alias=get_admin_session_cookie_name(),
+            alias=(
+                get_admin_session_cookie_name()
+            ),
         ),
     ] = None,
     csrf_cookie: Annotated[
         str | None,
         Cookie(
-            alias=get_admin_csrf_cookie_name(),
+            alias=(
+                get_admin_csrf_cookie_name()
+            ),
         ),
     ] = None,
     csrf_header: Annotated[
         str | None,
         Header(
-            alias=settings.admin_csrf_header_name,
+            alias=(
+                settings
+                .admin_csrf_header_name
+            ),
         ),
     ] = None,
 ) -> Response:
@@ -961,19 +1642,14 @@ async def destroy_admin_session(
     exists.
     """
 
-    # --------------------------------------------------------
-    # No browser session
-    # --------------------------------------------------------
-    #
-    # Treat logout without a session as idempotent.
-    #
     if not admin_session_token:
         _clear_admin_cookies(
             response
         )
 
         response.status_code = (
-            status.HTTP_204_NO_CONTENT
+            status
+            .HTTP_204_NO_CONTENT
         )
 
         return response
@@ -981,43 +1657,39 @@ async def destroy_admin_session(
     validated = None
 
     try:
-        # ----------------------------------------------------
-        # Resolve current session
-        # ----------------------------------------------------
-
-        validated = await get_valid_admin_session(
-            db,
-            raw_token=admin_session_token,
-            touch=False,
+        validated = (
+            await get_valid_admin_session(
+                db,
+                raw_token=(
+                    admin_session_token
+                ),
+                touch=False,
+            )
         )
-
-        # ----------------------------------------------------
-        # CSRF validation
-        # ----------------------------------------------------
 
         validate_admin_session_csrf(
             validated.session,
-            cookie_token=csrf_cookie,
-            header_token=csrf_header,
+            cookie_token=(
+                csrf_cookie
+            ),
+            header_token=(
+                csrf_header
+            ),
         )
-
-        # ----------------------------------------------------
-        # Server-side revocation
-        # ----------------------------------------------------
 
         await revoke_admin_session(
             db,
-            admin_session=validated.session,
+            admin_session=(
+                validated.session
+            ),
             reason="logout",
         )
 
-        # ----------------------------------------------------
-        # Audit revocation in the same transaction
-        # ----------------------------------------------------
-
         await record_audit_event(
             db,
-            actor_type=ActorType.ADMIN.value,
+            actor_type=(
+                ActorType.ADMIN.value
+            ),
             actor_id=str(
                 validated.admin.id
             ),
@@ -1050,47 +1722,41 @@ async def destroy_admin_session(
         await db.rollback()
 
         if validated is not None:
-            #
-            # Session validation succeeded. Therefore this
-            # InvalidAdminSessionError came from the later
-            # CSRF validation step.
-            #
             await _record_denied_auth_event(
                 db,
                 request=request,
                 action=(
-                    AuditAction.ADMIN_CSRF_DENIED
+                    AuditAction
+                    .ADMIN_CSRF_DENIED
                 ),
                 reason=(
                     exc.reason
                     or "csrf_validation_failed"
                 ),
-                admin=validated.admin,
+                admin=(
+                    validated.admin
+                ),
                 admin_session_id=(
                     validated.session.id
                 ),
             )
 
         elif exc.requires_revocation:
-            #
-            # Validation reached a persistent session and
-            # detected expiry/security invalidation.
-            #
-            await _persist_invalid_admin_session(
-                db,
-                request=request,
-                exc=exc,
+            await (
+                _persist_invalid_admin_session(
+                    db,
+                    request=request,
+                    exc=exc,
+                )
             )
 
         else:
-            #
-            # Unknown or already-revoked session credential.
-            #
             await _record_denied_auth_event(
                 db,
                 request=request,
                 action=(
-                    AuditAction.ADMIN_AUTH_DENIED
+                    AuditAction
+                    .ADMIN_AUTH_DENIED
                 ),
                 reason=(
                     exc.reason
@@ -1099,8 +1765,14 @@ async def destroy_admin_session(
             )
 
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid request verification.",
+            status_code=(
+                status
+                .HTTP_403_FORBIDDEN
+            ),
+            detail=(
+                "Invalid request "
+                "verification."
+            ),
         ) from exc
 
     except AdminSessionError as exc:
@@ -1109,28 +1781,37 @@ async def destroy_admin_session(
         await _record_denied_auth_event(
             db,
             request=request,
-            action=AuditAction.ADMIN_AUTH_DENIED,
-            reason="session_revocation_failed",
+            action=(
+                AuditAction
+                .ADMIN_AUTH_DENIED
+            ),
+            reason=(
+                "session_revocation_failed"
+            ),
             admin=(
                 validated.admin
-                if validated is not None
+                if validated
+                is not None
                 else None
             ),
             admin_session_id=(
                 validated.session.id
-                if validated is not None
+                if validated
+                is not None
                 else None
             ),
         )
 
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid request verification.",
+            status_code=(
+                status
+                .HTTP_403_FORBIDDEN
+            ),
+            detail=(
+                "Invalid request "
+                "verification."
+            ),
         ) from exc
-
-    # --------------------------------------------------------
-    # Remove browser credentials
-    # --------------------------------------------------------
 
     _clear_admin_cookies(
         response

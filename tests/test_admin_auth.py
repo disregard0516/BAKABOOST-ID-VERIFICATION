@@ -19,6 +19,7 @@ from app.services.admin.auth import (
     AdminAccountDisabledError,
     AdminAuthenticationError,
     AdminIdentity,
+    decode_admin_step_up_token,
     decode_admin_token,
     get_admin_for_identity,
 )
@@ -34,6 +35,14 @@ TEST_SUBJECT = (
 
 TEST_EMAIL = (
     "admin@example.com"
+)
+
+NORMAL_AUDIENCE = (
+    "bakaboost-admin-access-audience"
+)
+
+STEP_UP_AUDIENCE = (
+    "bakaboost-admin-step-up-audience"
 )
 
 
@@ -122,6 +131,18 @@ def force_cloudflare_auth_mode(
         False,
     )
 
+    monkeypatch.setattr(
+        settings,
+        "cloudflare_access_audience",
+        NORMAL_AUDIENCE,
+    )
+
+    monkeypatch.setattr(
+        settings,
+        "cloudflare_access_step_up_audience",
+        STEP_UP_AUDIENCE,
+    )
+
 
 def force_development_auth_mode(
     monkeypatch: pytest.MonkeyPatch,
@@ -147,14 +168,6 @@ def force_development_auth_mode(
 def test_cloudflare_identity_is_normalized(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """
-    A successfully validated Cloudflare Access assertion must
-    produce a normalized immutable administrator identity.
-
-    Subject whitespace is removed and email matching remains
-    case-insensitive through normalization.
-    """
-
     force_cloudflare_auth_mode(
         monkeypatch
     )
@@ -169,10 +182,27 @@ def test_cloudflare_identity_is_normalized(
         "type": "app",
     }
 
+    def fake_cloudflare_decoder(
+        raw_token: str,
+        *,
+        audience: str,
+    ):
+        assert (
+            raw_token
+            == "cloudflare-access-jwt"
+        )
+
+        assert (
+            audience
+            == NORMAL_AUDIENCE
+        )
+
+        return claims
+
     monkeypatch.setattr(
         admin_auth_service,
         "_decode_cloudflare_access_token",
-        lambda raw_token: claims,
+        fake_cloudflare_decoder,
     )
 
     identity = decode_admin_token(
@@ -192,14 +222,9 @@ def test_cloudflare_identity_is_normalized(
     assert identity.claims is claims
 
 
-def test_production_mode_uses_cloudflare_decoder(
+def test_production_mode_uses_normal_cloudflare_audience(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """
-    Outside explicit local development, administrator
-    authentication must go through Cloudflare Access.
-    """
-
     force_cloudflare_auth_mode(
         monkeypatch
     )
@@ -211,12 +236,19 @@ def test_production_mode_uses_cloudflare_decoder(
 
     def fake_cloudflare_decoder(
         raw_token: str,
+        *,
+        audience: str,
     ):
         calls["cloudflare"] += 1
 
         assert (
             raw_token
             == "production-token"
+        )
+
+        assert (
+            audience
+            == NORMAL_AUDIENCE
         )
 
         return {
@@ -267,11 +299,6 @@ def test_production_mode_uses_cloudflare_decoder(
 def test_development_mode_uses_only_development_decoder(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """
-    The dedicated development token mechanism exists only for
-    explicitly enabled local development.
-    """
-
     force_development_auth_mode(
         monkeypatch
     )
@@ -302,8 +329,11 @@ def test_development_mode_uses_only_development_decoder(
 
     def fake_cloudflare_decoder(
         raw_token: str,
+        *,
+        audience: str,
     ):
         del raw_token
+        del audience
 
         calls["cloudflare"] += 1
 
@@ -343,6 +373,11 @@ def test_development_mode_uses_only_development_decoder(
         "cloudflare": 0,
         "development": 1,
     }
+
+
+# ============================================================
+# ADMIN TOKEN INPUT VALIDATION
+# ============================================================
 
 
 @pytest.mark.parametrize(
@@ -386,24 +421,28 @@ def test_missing_or_blank_subject_is_rejected(
     monkeypatch: pytest.MonkeyPatch,
     subject,
 ) -> None:
-    """
-    No externally authenticated identity can enter the local
-    administrator authorization layer without an immutable
-    non-empty subject.
-    """
-
     force_cloudflare_auth_mode(
         monkeypatch
     )
 
-    monkeypatch.setattr(
-        admin_auth_service,
-        "_decode_cloudflare_access_token",
-        lambda raw_token: {
+    def fake_cloudflare_decoder(
+        raw_token: str,
+        *,
+        audience: str,
+    ):
+        del raw_token
+        del audience
+
+        return {
             "sub": subject,
             "email": TEST_EMAIL,
             "type": "app",
-        },
+        }
+
+    monkeypatch.setattr(
+        admin_auth_service,
+        "_decode_cloudflare_access_token",
+        fake_cloudflare_decoder,
     )
 
     with pytest.raises(
@@ -417,24 +456,27 @@ def test_missing_or_blank_subject_is_rejected(
 def test_missing_email_is_allowed_at_identity_layer(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """
-    Existing administrator authorization is subject-bound.
-
-    Email may be absent from the external assertion. Invitation
-    acceptance applies its own stricter email requirement.
-    """
-
     force_cloudflare_auth_mode(
         monkeypatch
     )
 
+    def fake_cloudflare_decoder(
+        raw_token: str,
+        *,
+        audience: str,
+    ):
+        del raw_token
+        del audience
+
+        return {
+            "sub": TEST_SUBJECT,
+            "type": "app",
+        }
+
     monkeypatch.setattr(
         admin_auth_service,
         "_decode_cloudflare_access_token",
-        lambda raw_token: {
-            "sub": TEST_SUBJECT,
-            "type": "app",
-        },
+        fake_cloudflare_decoder,
     )
 
     identity = decode_admin_token(
@@ -457,12 +499,6 @@ def test_missing_email_is_allowed_at_identity_layer(
 def test_cloudflare_decoder_enforces_expected_jwt_contract(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """
-    Verify the Cloudflare validation boundary is configured for
-    the expected issuer, audience and RS256 algorithm and
-    requires the security-critical standard claims.
-    """
-
     team_domain = (
         "bakaboost.cloudflareaccess.com"
     )
@@ -475,12 +511,6 @@ def test_cloudflare_decoder_enforces_expected_jwt_contract(
         settings,
         "cloudflare_access_team_domain",
         team_domain,
-    )
-
-    monkeypatch.setattr(
-        settings,
-        "cloudflare_access_audience",
-        audience,
     )
 
     signing_key = SimpleNamespace(
@@ -573,7 +603,8 @@ def test_cloudflare_decoder_enforces_expected_jwt_contract(
     claims = (
         admin_auth_service
         ._decode_cloudflare_access_token(
-            "signed-cloudflare-token"
+            "signed-cloudflare-token",
+            audience=audience,
         )
     )
 
@@ -639,23 +670,12 @@ def test_cloudflare_non_application_token_is_rejected(
     monkeypatch: pytest.MonkeyPatch,
     token_type,
 ) -> None:
-    """
-    Administrator authentication accepts only Cloudflare
-    Access application tokens.
-    """
-
     monkeypatch.setattr(
         admin_auth_service,
         "_get_cloudflare_access_team_domain",
         lambda: (
             "bakaboost.cloudflareaccess.com"
         ),
-    )
-
-    monkeypatch.setattr(
-        admin_auth_service,
-        "_get_cloudflare_access_audience",
-        lambda: "test-audience",
     )
 
     signing_key = SimpleNamespace(
@@ -700,9 +720,255 @@ def test_cloudflare_non_application_token_is_rejected(
         (
             admin_auth_service
             ._decode_cloudflare_access_token(
-                "cloudflare-token"
+                "cloudflare-token",
+                audience="test-audience",
             )
         )
+
+
+# ============================================================
+# STEP-UP TOKEN VALIDATION
+# ============================================================
+
+
+def test_step_up_decoder_uses_only_step_up_audience(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    force_cloudflare_auth_mode(
+        monkeypatch
+    )
+
+    calls: list[
+        tuple[str, str]
+    ] = []
+
+    def fake_cloudflare_decoder(
+        raw_token: str,
+        *,
+        audience: str,
+    ):
+        calls.append(
+            (
+                raw_token,
+                audience,
+            )
+        )
+
+        return {
+            "sub": TEST_SUBJECT,
+            "email": TEST_EMAIL,
+            "type": "app",
+        }
+
+    monkeypatch.setattr(
+        admin_auth_service,
+        "_decode_cloudflare_access_token",
+        fake_cloudflare_decoder,
+    )
+
+    identity = (
+        decode_admin_step_up_token(
+            "  step-up-token  "
+        )
+    )
+
+    assert (
+        identity.subject
+        == TEST_SUBJECT
+    )
+
+    assert (
+        identity.email
+        == TEST_EMAIL
+    )
+
+    assert calls == [
+        (
+            "step-up-token",
+            STEP_UP_AUDIENCE,
+        )
+    ]
+
+
+def test_step_up_decoder_does_not_use_normal_audience(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    force_cloudflare_auth_mode(
+        monkeypatch
+    )
+
+    def fake_cloudflare_decoder(
+        raw_token: str,
+        *,
+        audience: str,
+    ):
+        del raw_token
+
+        assert (
+            audience
+            != NORMAL_AUDIENCE
+        )
+
+        assert (
+            audience
+            == STEP_UP_AUDIENCE
+        )
+
+        return {
+            "sub": TEST_SUBJECT,
+            "email": TEST_EMAIL,
+            "type": "app",
+        }
+
+    monkeypatch.setattr(
+        admin_auth_service,
+        "_decode_cloudflare_access_token",
+        fake_cloudflare_decoder,
+    )
+
+    identity = (
+        decode_admin_step_up_token(
+            "step-up-token"
+        )
+    )
+
+    assert (
+        identity.subject
+        == TEST_SUBJECT
+    )
+
+
+@pytest.mark.parametrize(
+    "raw_token",
+    [
+        "",
+        "   ",
+        "\t",
+        "\n",
+    ],
+)
+def test_blank_step_up_token_is_rejected(
+    raw_token: str,
+) -> None:
+    with pytest.raises(
+        AdminAuthenticationError
+    ):
+        decode_admin_step_up_token(
+            raw_token
+        )
+
+
+def test_non_string_step_up_token_is_rejected() -> None:
+    with pytest.raises(
+        AdminAuthenticationError
+    ):
+        decode_admin_step_up_token(
+            None  # type: ignore[arg-type]
+        )
+
+
+def test_step_up_requires_configured_audience(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    force_cloudflare_auth_mode(
+        monkeypatch
+    )
+
+    monkeypatch.setattr(
+        settings,
+        "cloudflare_access_step_up_audience",
+        "",
+    )
+
+    with pytest.raises(
+        AdminAuthenticationError,
+        match=(
+            "step-up authentication "
+            "audience is not configured"
+        ),
+    ):
+        decode_admin_step_up_token(
+            "step-up-token"
+        )
+
+
+def test_step_up_does_not_use_development_decoder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    force_development_auth_mode(
+        monkeypatch
+    )
+
+    monkeypatch.setattr(
+        settings,
+        "cloudflare_access_step_up_audience",
+        STEP_UP_AUDIENCE,
+    )
+
+    development_calls = 0
+
+    def fake_development_decoder(
+        raw_token: str,
+    ):
+        nonlocal development_calls
+
+        del raw_token
+
+        development_calls += 1
+
+        raise AssertionError(
+            "Step-up validation must not use "
+            "the development token decoder."
+        )
+
+    def fake_cloudflare_decoder(
+        raw_token: str,
+        *,
+        audience: str,
+    ):
+        assert (
+            raw_token
+            == "step-up-token"
+        )
+
+        assert (
+            audience
+            == STEP_UP_AUDIENCE
+        )
+
+        return {
+            "sub": TEST_SUBJECT,
+            "email": TEST_EMAIL,
+            "type": "app",
+        }
+
+    monkeypatch.setattr(
+        admin_auth_service,
+        "_decode_development_admin_token",
+        fake_development_decoder,
+    )
+
+    monkeypatch.setattr(
+        admin_auth_service,
+        "_decode_cloudflare_access_token",
+        fake_cloudflare_decoder,
+    )
+
+    identity = (
+        decode_admin_step_up_token(
+            "step-up-token"
+        )
+    )
+
+    assert (
+        identity.subject
+        == TEST_SUBJECT
+    )
+
+    assert (
+        development_calls
+        == 0
+    )
 
 
 # ============================================================
@@ -737,11 +1003,6 @@ async def test_existing_active_admin_is_authorized() -> None:
 
 @pytest.mark.asyncio
 async def test_valid_external_identity_without_local_admin_is_rejected() -> None:
-    """
-    A valid external identity must never automatically become a
-    BAKABOOST administrator.
-    """
-
     db = FakeDatabaseSession(
         None
     )

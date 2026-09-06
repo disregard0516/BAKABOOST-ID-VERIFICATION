@@ -122,7 +122,7 @@ export default function FormLayout01() {
       <div className="sm:mx-auto sm:max-w-2xl">
         <h3 className="text-2xl font-semibold text-white">Register to workspace</h3>
         <p className="mt-1 text-sm text-slate-300">
-          Take a few moments to register for your company's workspace
+          Take a few moments to register for your company&apos;s workspace
         </p>
         <form action="#" method="post" className="mt-8">
           <div className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-6">

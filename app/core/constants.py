@@ -199,6 +199,14 @@ class AuditAction(StrEnum):
     ADMIN_REAUTH_REQUIRED = (
         "admin.reauthentication_required"
     )
+    
+    ADMIN_STEP_UP_SUCCEEDED = (
+        "admin.step_up_succeeded"
+    )
+
+    ADMIN_STEP_UP_DENIED = (
+        "admin.step_up_denied"
+    )
 
     # ========================================================
     # ADMIN SESSION SECURITY

@@ -67,6 +67,11 @@ def configure_valid_production(
     )
     monkeypatch.setattr(
         settings,
+        "cloudflare_access_step_up_audience",
+        "bakaboost-admin-step-up-audience",
+    )
+    monkeypatch.setattr(
+        settings,
         "rate_limiting_enabled",
         True,
     )
@@ -269,6 +274,50 @@ def test_production_requires_cloudflare_access_audience(
     ):
         validate_runtime_security()
 
+def test_production_requires_cloudflare_access_step_up_audience(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configure_valid_production(
+        monkeypatch
+    )
+
+    monkeypatch.setattr(
+        settings,
+        "cloudflare_access_step_up_audience",
+        "",
+    )
+
+    with pytest.raises(
+        UnsafeProductionConfiguration,
+        match=(
+            "Cloudflare Access step-up audience "
+            "is missing"
+        ),
+    ):
+        validate_runtime_security()
+
+
+def test_production_requires_distinct_cloudflare_access_step_up_audience(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configure_valid_production(
+        monkeypatch
+    )
+
+    monkeypatch.setattr(
+        settings,
+        "cloudflare_access_step_up_audience",
+        settings.cloudflare_access_audience,
+    )
+
+    with pytest.raises(
+        UnsafeProductionConfiguration,
+        match=(
+            "Cloudflare Access step-up audience must be "
+            "different"
+        ),
+    ):
+        validate_runtime_security()
 
 def test_production_cannot_disable_rate_limiting(
     monkeypatch: pytest.MonkeyPatch,

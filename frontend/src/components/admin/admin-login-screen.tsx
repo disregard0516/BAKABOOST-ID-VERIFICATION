@@ -83,6 +83,7 @@ export function AdminLoginScreen() {
         "
       />
 
+
       {/* Header */}
 
       <header
@@ -144,6 +145,7 @@ export function AdminLoginScreen() {
           </div>
         </div>
 
+
         <div
           className="
             hidden
@@ -163,6 +165,7 @@ export function AdminLoginScreen() {
           "
         >
           <span
+            aria-hidden="true"
             className="
               size-1.5
               rounded-full
@@ -174,6 +177,7 @@ export function AdminLoginScreen() {
           Secure administrator portal
         </div>
       </header>
+
 
       {/* Main */}
 
@@ -249,6 +253,7 @@ export function AdminLoginScreen() {
               "
             />
 
+
             <div
               className="
                 relative
@@ -286,6 +291,7 @@ export function AdminLoginScreen() {
                   Verification operations
                 </div>
 
+
                 <h2
                   className="
                     mt-7
@@ -305,6 +311,7 @@ export function AdminLoginScreen() {
                   </span>
                 </h2>
 
+
                 <p
                   className="
                     mt-5
@@ -319,6 +326,7 @@ export function AdminLoginScreen() {
                   identity and control access after a final
                   administrator decision.
                 </p>
+
 
                 <div
                   className="
@@ -352,6 +360,7 @@ export function AdminLoginScreen() {
                 </div>
               </div>
 
+
               <div>
                 <div
                   className="
@@ -368,11 +377,11 @@ export function AdminLoginScreen() {
 
                 <div className="space-y-3">
                   <SecurityPoint>
-                    Identity-provider protected sign-in
+                    Cloudflare Access protected sign-in
                   </SecurityPoint>
 
                   <SecurityPoint>
-                    MFA-ready administrator authentication
+                    MFA-protected administrator access
                   </SecurityPoint>
 
                   <SecurityPoint>
@@ -382,6 +391,7 @@ export function AdminLoginScreen() {
               </div>
             </div>
           </aside>
+
 
           {/* Authentication panel */}
 
@@ -449,6 +459,7 @@ export function AdminLoginScreen() {
                   />
                 </div>
 
+
                 <div
                   className="
                     inline-flex
@@ -473,6 +484,7 @@ export function AdminLoginScreen() {
                   Protected sign-in
                 </div>
               </div>
+
 
               <div className="mt-9">
                 <div
@@ -515,20 +527,24 @@ export function AdminLoginScreen() {
                     text-slate-400
                   "
                 >
-                  Sign in with an authorized administrator
-                  account to manage verification requests,
-                  review submitted evidence and make access
-                  decisions.
+                  Administrator access is protected by
+                  Cloudflare Access and restricted to approved
+                  identities. Continue to enter the BAKABOOST
+                  verification workspace.
                 </p>
               </div>
 
-              {/* IMPORTANT:
-                  Auth0 auth routes use normal browser navigation.
-                  Do not replace this with router.push or Next Link.
-              */}
 
+              {/*
+               * Cloudflare Access protects the /admin boundary.
+               *
+               * This link intentionally uses normal browser
+               * navigation. It never requests, reads, stores,
+               * or exposes the Cloudflare Access JWT to
+               * client-side JavaScript.
+               */}
               <a
-                href="/auth/login?returnTo=%2Fadmin"
+                href="/admin"
                 className="
                   group
                   relative
@@ -586,7 +602,7 @@ export function AdminLoginScreen() {
                 />
 
                 <span className="relative">
-                  Sign in to BAKABOOST
+                  Continue to BAKABOOST
                 </span>
 
                 <ArrowRight
@@ -600,6 +616,7 @@ export function AdminLoginScreen() {
                   aria-hidden="true"
                 />
               </a>
+
 
               <div
                 className="
@@ -619,9 +636,10 @@ export function AdminLoginScreen() {
                   aria-hidden="true"
                 />
 
-                Authentication is handled by BAKABOOST&apos;s
-                configured identity provider
+                Authentication is enforced by the protected
+                administrator access boundary
               </div>
+
 
               <div
                 className="
@@ -682,6 +700,7 @@ export function AdminLoginScreen() {
                 </div>
               </div>
 
+
               <div
                 className="
                   mt-7
@@ -695,9 +714,16 @@ export function AdminLoginScreen() {
                 "
               >
                 BAKABOOST Identity Verification
-                <span className="mx-2 text-slate-800">
-                  •
+
+                <span
+                  className="
+                    mx-2
+                    text-slate-800
+                  "
+                >
+                  &bull;
                 </span>
+
                 Secure administration
               </div>
             </div>
@@ -750,7 +776,9 @@ function SecurityPoint({
         />
       </div>
 
-      <span>{children}</span>
+      <span>
+        {children}
+      </span>
     </div>
   );
 }
