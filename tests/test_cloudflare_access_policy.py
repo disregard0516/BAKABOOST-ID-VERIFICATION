@@ -166,6 +166,11 @@ def configure_cloudflare_settings(
     )
     monkeypatch.setattr(
         settings,
+        "cloudflare_admin_mfa_policy_id",
+        "mfa-policy-123",
+    )
+    monkeypatch.setattr(
+        settings,
         "cloudflare_api_token",
         "super-secret-api-token",
     )
@@ -336,21 +341,33 @@ async def test_sync_uses_reusable_policy_endpoint_and_preserves_policy(
 
     assert client.timeout == 15.0
 
+    expected_mfa_url = (
+        "https://api.cloudflare.com/client/v4"
+        "/accounts/account-123"
+        "/access/policies/mfa-policy-123"
+    )
+
+    expected_headers = {
+        "Authorization": (
+            "Bearer super-secret-api-token"
+        ),
+        "Content-Type": "application/json",
+    }
+
     assert client.get_calls == [
         {
             "url": expected_url,
-            "headers": {
-                "Authorization": (
-                    "Bearer super-secret-api-token"
-                ),
-                "Content-Type": "application/json",
-            },
-        }
+            "headers": expected_headers,
+        },
+        {
+            "url": expected_mfa_url,
+            "headers": expected_headers,
+        },
     ]
 
     assert len(
         client.put_calls
-    ) == 1
+    ) == 2
 
     put_call = client.put_calls[0]
 
@@ -390,6 +407,26 @@ async def test_sync_uses_reusable_policy_endpoint_and_preserves_policy(
         ],
         "session_duration": "8h",
     }
+
+    mfa_put_call = client.put_calls[1]
+
+    assert (
+        mfa_put_call["url"]
+        == expected_mfa_url
+    )
+
+    assert mfa_put_call["json"]["include"] == [
+        {
+            "email": {
+                "email": "admina@example.test",
+            }
+        },
+        {
+            "email": {
+                "email": "adminb@example.test",
+            }
+        },
+    ]
 
 
 @pytest.mark.asyncio

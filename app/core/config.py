@@ -100,6 +100,7 @@ class Settings(BaseSettings):
     cloudflare_account_id: str = ""
     cloudflare_admin_app_id: str = ""
     cloudflare_admin_policy_id: str = ""
+    cloudflare_admin_mfa_policy_id: str = ""
 
     # Secret API token with the minimum required permission:
     # Account -> Access: Apps and Policies -> Edit.

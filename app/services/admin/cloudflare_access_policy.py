@@ -19,6 +19,7 @@ def _require_cloudflare_sync_config() -> None:
         "cloudflare_account_id": settings.cloudflare_account_id,
         "cloudflare_admin_app_id": settings.cloudflare_admin_app_id,
         "cloudflare_admin_policy_id": settings.cloudflare_admin_policy_id,
+        "cloudflare_admin_mfa_policy_id": settings.cloudflare_admin_mfa_policy_id,
         "cloudflare_api_token": settings.cloudflare_api_token,
     }
 
@@ -177,6 +178,78 @@ async def sync_admin_access_policy(
         if not update_body.get("success"):
             raise CloudflareAccessPolicyError(
                 "Cloudflare Access policy update was unsuccessful."
+            )
+
+        mfa_url = (
+            "https://api.cloudflare.com/client/v4"
+            f"/accounts/{settings.cloudflare_account_id}"
+            f"/access/policies/{settings.cloudflare_admin_mfa_policy_id}"
+        )
+
+        mfa_current_response = await client.get(
+            mfa_url,
+            headers=headers,
+        )
+
+        if mfa_current_response.status_code != 200:
+            raise CloudflareAccessPolicyError(
+                "Cloudflare MFA enrollment policy could not be read."
+            )
+
+        mfa_current_body = mfa_current_response.json()
+
+        if not mfa_current_body.get("success"):
+            raise CloudflareAccessPolicyError(
+                "Cloudflare MFA enrollment policy read was unsuccessful."
+            )
+
+        mfa_current = mfa_current_body.get("result")
+
+        if not isinstance(mfa_current, dict):
+            raise CloudflareAccessPolicyError(
+                "Cloudflare MFA enrollment policy response was invalid."
+            )
+
+        mfa_payload = {
+            "name": mfa_current.get(
+                "name",
+                "BAKABOOST Admin MFA Enrollment",
+            ),
+            "decision": mfa_current.get(
+                "decision",
+                "allow",
+            ),
+            "include": include,
+            "exclude": mfa_current.get(
+                "exclude",
+                [],
+            ),
+            "require": mfa_current.get(
+                "require",
+                [],
+            ),
+            "session_duration": mfa_current.get(
+                "session_duration",
+                "24h",
+            ),
+        }
+
+        mfa_update_response = await client.put(
+            mfa_url,
+            headers=headers,
+            json=mfa_payload,
+        )
+
+        if mfa_update_response.status_code != 200:
+            raise CloudflareAccessPolicyError(
+                "Cloudflare MFA enrollment policy could not be updated."
+            )
+
+        mfa_update_body = mfa_update_response.json()
+
+        if not mfa_update_body.get("success"):
+            raise CloudflareAccessPolicyError(
+                "Cloudflare MFA enrollment policy update was unsuccessful."
             )
 
     return emails
