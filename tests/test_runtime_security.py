@@ -72,6 +72,11 @@ def configure_valid_production(
     )
     monkeypatch.setattr(
         settings,
+        "cloudflare_access_enrollment_audience",
+        "bakaboost-admin-enrollment-audience",
+    )
+    monkeypatch.setattr(
+        settings,
         "rate_limiting_enabled",
         True,
     )

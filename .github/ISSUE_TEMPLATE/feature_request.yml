@@ -1,0 +1,51 @@
+name: Feature Request
+description: Suggest an improvement to BAKABOOST
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem or limitation would this feature address?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Solution
+      description: Describe the desired behavior or implementation.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Applicant verification
+        - Discord integration
+        - Administrator experience
+        - Security
+        - Evidence management
+        - Audit and compliance
+        - Frontend / UX
+        - Backend API
+        - Infrastructure
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: security
+    attributes:
+      label: Security and Privacy Considerations
+      description: Describe any authentication, authorization, privacy, evidence-retention, or Discord-access implications.
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Add any other useful context, mockups, or examples.
