@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import (
@@ -533,89 +532,25 @@ async def get_sensitive_admin(
     current: CurrentAdminSession,
 ) -> Admin:
     """
-    Sensitive administrator operations require:
+    Resolve an administrator for sensitive operations.
 
-    - a valid server-managed session;
-    - MFA assurance;
-    - sufficiently recent authentication.
+    Authentication assurance is established when the
+    administrator enters the Cloudflare Access protected admin
+    application and BAKABOOST creates a valid server-managed
+    administrator session.
 
-    Production cannot use the local development bypass.
+    Sensitive operations continue to require:
 
-    MFA and reauthentication denials are audited using the
-    authenticated administrator/session context.
+    - a valid, non-expired server-managed administrator session;
+    - an active administrator account;
+    - current security/session version;
+    - CSRF validation through require_sensitive_permission();
+    - role-based permission enforcement;
+    - route/service-level audit logging.
+
+    A separate Cloudflare step-up ceremony is intentionally not
+    required for every sensitive administrator action.
     """
-
-    if (
-        _development_admin_step_up_bypass_enabled()
-    ):
-        return current.admin
-
-    admin_session = current.session
-
-    if (
-        admin_session.mfa_verified_at
-        is None
-    ):
-        await _record_admin_security_denial(
-            session,
-            request=request,
-            current=current,
-            action=(
-                AuditAction
-                .ADMIN_MFA_REQUIRED
-            ),
-            reason="mfa_required",
-        )
-
-        raise HTTPException(
-            status_code=(
-                status.HTTP_403_FORBIDDEN
-            ),
-            detail=(
-                "Additional administrator "
-                "authentication required."
-            ),
-        )
-
-    now = datetime.now(UTC)
-
-    age_seconds = (
-        now
-        - admin_session.authenticated_at
-    ).total_seconds()
-
-    maximum_age = (
-        settings
-        .admin_sensitive_reauth_max_age_seconds
-    )
-
-    if (
-        maximum_age <= 0
-        or age_seconds < 0
-        or age_seconds > maximum_age
-    ):
-        await _record_admin_security_denial(
-            session,
-            request=request,
-            current=current,
-            action=(
-                AuditAction
-                .ADMIN_REAUTH_REQUIRED
-            ),
-            reason=(
-                "reauthentication_required"
-            ),
-        )
-
-        raise HTTPException(
-            status_code=(
-                status.HTTP_403_FORBIDDEN
-            ),
-            detail=(
-                "Administrator "
-                "reauthentication required."
-            ),
-        )
 
     return current.admin
 

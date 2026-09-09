@@ -90,11 +90,18 @@ async def get_access(
 
     grant, invite_code = access
 
+    access_available = (
+        grant.status == AccessGrantStatus.ISSUED
+        and invite_code is not None
+    )
+
     return ApplicantAccessResponse(
         status=grant.status,
-        access_available=True,
+        access_available=access_available,
         discord_invite_url=(
             f"https://discord.gg/{invite_code}"
+            if access_available
+            else None
         ),
         expires_at=grant.expires_at,
     )

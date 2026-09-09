@@ -1426,7 +1426,7 @@ export function IdentityVerificationForm({
                     {config.retention_days !==
                     null
                       ? `${config.retention_days} days`
-                      : "Policy controlled"}
+                      : "Indefinite · manual deletion only"}
                   </div>
                 </div>
               </div>

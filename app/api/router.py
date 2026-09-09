@@ -7,6 +7,9 @@ from app.api.rate_limits import rate_limit
 from app.api.routes.admin.access import (
     router as admin_access_router,
 )
+from app.api.routes.admin.audit import (
+    router as admin_audit_router,
+)
 from app.api.routes.admin.auth import (
     router as admin_auth_router,
 )
@@ -21,6 +24,9 @@ from app.api.routes.admin.queue import (
 )
 from app.api.routes.admin.review import (
     router as admin_review_router,
+)
+from app.api.routes.admin.settings import (
+    router as admin_settings_router,
 )
 from app.api.routes.admin.team import (
     router as admin_team_router,
@@ -84,6 +90,22 @@ admin_rate_limit = Depends(
 
 api_router.include_router(
     admin_auth_router,
+    prefix="/admin",
+    dependencies=[
+        admin_rate_limit,
+    ],
+)
+
+api_router.include_router(
+    admin_audit_router,
+    prefix="/admin",
+    dependencies=[
+        admin_rate_limit,
+    ],
+)
+
+api_router.include_router(
+    admin_settings_router,
     prefix="/admin",
     dependencies=[
         admin_rate_limit,

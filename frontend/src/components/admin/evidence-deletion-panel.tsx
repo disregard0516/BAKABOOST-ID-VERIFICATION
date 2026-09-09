@@ -111,10 +111,11 @@ export function EvidenceDeletionPanel({
               text-slate-600
             "
           >
-            Raw identity evidence
-            should only be retained for
-            the documented verification
-            purpose and retention period.
+            Submitted identity evidence
+            is retained indefinitely by
+            default. Use this protected
+            action when manual deletion
+            is required.
           </p>
 
           <button

@@ -11,9 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import (
     get_verification_session,
 )
-from app.db.models.retention_policy import (
-    RetentionPolicy,
-)
 from app.db.models.verification_request import (
     VerificationRequest,
 )
@@ -24,9 +21,6 @@ from app.db.session import get_db_session
 from app.schemas.evidence import RequiredEvidence
 from app.schemas.form_config import (
     VerificationFormConfigResponse,
-)
-from app.services.retention.service import (
-    get_default_retention_policy,
 )
 from app.services.verification.session_service import (
     InvalidVerificationSessionError,
@@ -76,21 +70,17 @@ async def get_form_config(
             detail="Verification authentication required.",
         )
 
-    retention_policy: RetentionPolicy | None = (
-        await get_default_retention_policy(
-            session
-        )
-    )
-
     return VerificationFormConfigResponse(
         required_evidence=(
             RequiredEvidence.model_validate(
                 request.required_evidence_json
             )
         ),
-        retention_days=(
-            retention_policy.raw_evidence_retention_days
-            if retention_policy
-            else None
-        ),
+        #
+        # Submitted evidence has no automatic
+        # deletion deadline. It remains stored
+        # until an authorized administrator uses
+        # the protected manual deletion workflow.
+        #
+        retention_days=None,
     )

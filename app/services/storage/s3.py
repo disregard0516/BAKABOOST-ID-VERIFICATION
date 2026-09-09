@@ -1,5 +1,4 @@
 from functools import lru_cache
-from typing import Any
 
 import boto3
 from botocore.client import BaseClient
@@ -11,12 +10,15 @@ class StorageConfigurationError(RuntimeError):
     pass
 
 
-class StorageDeletionError(RuntimeError):
-    pass
-
-
 @lru_cache
 def get_s3_client() -> BaseClient:
+    """
+    Return the configured private S3-compatible storage client.
+
+    Production uses Cloudflare R2 through its S3-compatible API.
+    The client is cached because configuration is immutable for the
+    lifetime of the application process.
+    """
     if not settings.s3_bucket_name:
         raise StorageConfigurationError(
             "S3_BUCKET_NAME is not configured."
@@ -41,6 +43,12 @@ def upload_private_object(
     content: bytes,
     content_type: str,
 ) -> None:
+    """
+    Upload one evidence object to private object storage.
+
+    No public ACL is applied. Public access must also remain disabled
+    at the bucket/provider level.
+    """
     client = get_s3_client()
 
     client.put_object(
@@ -51,144 +59,25 @@ def upload_private_object(
     )
 
 
-def _delete_object_versions(
-    *,
-    client: BaseClient,
-    object_key: str,
-) -> None:
-    """
-    Permanently remove every version and delete
-    marker for one exact object key.
-
-    Required when bucket versioning is Enabled or
-    Suspended. Prefix matching is filtered back to
-    the exact key so neighboring objects cannot be
-    deleted accidentally.
-    """
-    paginator = client.get_paginator(
-        "list_object_versions"
-    )
-
-    objects_to_delete: list[
-        dict[str, str]
-    ] = []
-
-    for page in paginator.paginate(
-        Bucket=settings.s3_bucket_name,
-        Prefix=object_key,
-    ):
-        for version in page.get(
-            "Versions",
-            [],
-        ):
-            if (
-                version.get("Key")
-                == object_key
-            ):
-                objects_to_delete.append(
-                    {
-                        "Key": object_key,
-                        "VersionId": (
-                            version[
-                                "VersionId"
-                            ]
-                        ),
-                    }
-                )
-
-        for marker in page.get(
-            "DeleteMarkers",
-            [],
-        ):
-            if (
-                marker.get("Key")
-                == object_key
-            ):
-                objects_to_delete.append(
-                    {
-                        "Key": object_key,
-                        "VersionId": (
-                            marker[
-                                "VersionId"
-                            ]
-                        ),
-                    }
-                )
-
-    #
-    # S3 DeleteObjects accepts at most
-    # 1,000 objects per request.
-    #
-    for start in range(
-        0,
-        len(objects_to_delete),
-        1000,
-    ):
-        batch = objects_to_delete[
-            start : start + 1000
-        ]
-
-        if not batch:
-            continue
-
-        response: dict[str, Any] = (
-            client.delete_objects(
-                Bucket=settings.s3_bucket_name,
-                Delete={
-                    "Objects": batch,
-                    "Quiet": True,
-                },
-            )
-        )
-
-        errors = response.get(
-            "Errors",
-            [],
-        )
-
-        if errors:
-            raise StorageDeletionError(
-                "One or more S3 object versions "
-                "could not be deleted."
-            )
-
-
 def delete_private_object(
     *,
     object_key: str,
 ) -> None:
     """
-    Physically remove a private evidence object.
+    Physically delete one exact private evidence object.
 
-    For a non-versioned bucket, DeleteObject is
-    sufficient and is idempotent.
+    BAKABOOST production storage uses Cloudflare R2. R2 implements
+    the S3 DeleteObject operation but does not implement S3 bucket
+    versioning APIs such as GetBucketVersioning.
 
-    For an Enabled/Suspended versioned bucket,
-    every exact-key object version and delete
-    marker is removed.
+    Therefore deletion intentionally targets only the exact object
+    key with DeleteObject and performs no version-discovery calls.
+
+    DeleteObject is safe for the application's cleanup and manual
+    evidence-deletion flows and does not prefix-match neighboring
+    evidence objects.
     """
     client = get_s3_client()
-
-    versioning = (
-        client.get_bucket_versioning(
-            Bucket=settings.s3_bucket_name
-        )
-    )
-
-    versioning_status = (
-        versioning.get("Status")
-    )
-
-    if versioning_status in {
-        "Enabled",
-        "Suspended",
-    }:
-        _delete_object_versions(
-            client=client,
-            object_key=object_key,
-        )
-
-        return
 
     client.delete_object(
         Bucket=settings.s3_bucket_name,
@@ -200,6 +89,9 @@ def create_signed_read_url(
     *,
     object_key: str,
 ) -> str:
+    """
+    Create a short-lived signed URL for one private evidence object.
+    """
     client = get_s3_client()
 
     return client.generate_presigned_url(
@@ -212,4 +104,26 @@ def create_signed_read_url(
             settings
             .evidence_signed_url_ttl_seconds
         ),
+    )
+
+
+def open_private_object(
+    *,
+    object_key: str,
+):
+    """
+    Open one private evidence object for server-side streaming.
+
+    The returned S3 response contains a StreamingBody under
+    ``Body``. Callers are responsible for closing that body
+    after streaming completes.
+
+    Evidence bytes remain private: the browser never receives
+    object-storage credentials or a direct R2 object URL.
+    """
+    client = get_s3_client()
+
+    return client.get_object(
+        Bucket=settings.s3_bucket_name,
+        Key=object_key,
     )

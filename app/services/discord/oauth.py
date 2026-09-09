@@ -1,3 +1,4 @@
+import logging
 from urllib.parse import urlencode
 
 import httpx
@@ -8,6 +9,7 @@ from app.schemas.discord import (
     DiscordUser,
 )
 
+logger = logging.getLogger(__name__)
 
 class DiscordOAuthError(Exception):
     pass
@@ -70,6 +72,22 @@ async def exchange_discord_code(
         ) from exc
 
     if response.status_code != 200:
+        try:
+            error_payload = response.json()
+            safe_error = {
+                key: error_payload.get(key)
+                for key in ("error", "error_description", "message", "code")
+                if error_payload.get(key) is not None
+            }
+        except ValueError:
+            safe_error = {"body": "<non-json response>"}
+
+        logger.warning(
+            "Discord OAuth token exchange rejected: status=%s error=%s",
+            response.status_code,
+            safe_error,
+        )
+
         raise DiscordOAuthError(
             "Discord OAuth token exchange was rejected."
         )

@@ -537,7 +537,7 @@ def test_invitation_acceptance_rejects_identity_mismatch(
 
     monkeypatch.setattr(
         admin_team_route,
-        "decode_admin_token",
+        "decode_admin_enrollment_token",
         lambda raw_token: identity,
     )
 
@@ -623,7 +623,7 @@ def test_unavailable_invitations_share_generic_public_error(
 
     monkeypatch.setattr(
         admin_team_route,
-        "decode_admin_token",
+        "decode_admin_enrollment_token",
         lambda raw_token: identity,
     )
 
@@ -712,7 +712,7 @@ def test_successful_acceptance_binds_immutable_cloudflare_subject(
 
     monkeypatch.setattr(
         admin_team_route,
-        "decode_admin_token",
+        "decode_admin_enrollment_token",
         lambda raw_token: identity,
     )
 
@@ -734,6 +734,32 @@ def test_successful_acceptance_binds_immutable_cloudflare_subject(
         invitation_service,
         "record_audit_event",
         fake_record_audit_event,
+    )
+
+    sync_calls: list[str] = []
+
+    async def fake_sync_admin_access_policy(
+        session,
+    ):
+        assert session is db
+
+        # Critical transaction-order invariant:
+        # Cloudflare sync happens only after local activation
+        # has already committed successfully.
+        assert db.commit_count == 1
+
+        sync_calls.append(
+            "called"
+        )
+
+        return [
+            "invitee@example.test"
+        ]
+
+    monkeypatch.setattr(
+        admin_team_route,
+        "sync_admin_access_policy",
+        fake_sync_admin_access_policy,
     )
 
     raw_invitation_token = (
@@ -807,6 +833,10 @@ def test_successful_acceptance_binds_immutable_cloudflare_subject(
 
     assert db.commit_count == 1
     assert db.rollback_count == 0
+
+    assert sync_calls == [
+        "called"
+    ]
 
     #
     # The public response must never expose the immutable
@@ -994,3 +1024,319 @@ def test_state_changing_team_request_rejects_unapproved_origin(
     )
 
     assert response.status_code == 403
+
+# ============================================================
+# CLOUDFLARE ADMIN ALLOW-LIST POST-COMMIT SYNCHRONIZATION
+# ============================================================
+
+
+def build_direct_admin_request():
+    """
+    Minimal Starlette request suitable for direct route tests.
+    """
+
+    from starlette.requests import Request
+
+    return Request(
+        {
+            "type": "http",
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "https",
+            "path": "/api/admin/team/test",
+            "raw_path": b"/api/admin/team/test",
+            "query_string": b"",
+            "headers": [
+                (
+                    b"user-agent",
+                    b"bakaboost-test-agent",
+                ),
+                (
+                    b"x-request-id",
+                    b"bakaboost-test-request",
+                ),
+            ],
+            "client": (
+                "127.0.0.1",
+                12345,
+            ),
+            "server": (
+                "testserver",
+                443,
+            ),
+        }
+    )
+
+
+@pytest.mark.asyncio
+async def test_disable_admin_syncs_cloudflare_only_after_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = FakeDatabaseSession()
+
+    acting_admin = build_admin(
+        role=AdminRole.SUPER_ADMIN,
+    )
+    acting_admin.id = uuid4()
+
+    target = build_admin(
+        role=AdminRole.ADMIN,
+    )
+    target.id = uuid4()
+
+    async def fake_disable_admin(
+        session,
+        *,
+        target_admin_id,
+        acting_admin,
+        **kwargs,
+    ):
+        del kwargs
+
+        assert session is db
+        assert target_admin_id == target.id
+        assert acting_admin is not None
+        assert db.commit_count == 0
+
+        target.is_active = False
+        target.disabled_at = utcnow()
+        target.security_version += 1
+
+        return target
+
+    sync_calls: list[str] = []
+
+    async def fake_sync_admin_access_policy(
+        session,
+    ):
+        assert session is db
+
+        #
+        # Critical ordering invariant:
+        # local disable commits before Cloudflare is touched.
+        #
+        assert db.commit_count == 1
+        assert target.is_active is False
+
+        sync_calls.append(
+            "disable"
+        )
+
+        return []
+
+    monkeypatch.setattr(
+        admin_team_route,
+        "disable_admin",
+        fake_disable_admin,
+    )
+    monkeypatch.setattr(
+        admin_team_route,
+        "sync_admin_access_policy",
+        fake_sync_admin_access_policy,
+    )
+
+    response = await admin_team_route.disable_team_admin(
+        admin_id=target.id,
+        http_request=build_direct_admin_request(),
+        session=db,
+        current=SimpleNamespace(
+            session=SimpleNamespace(
+                id=uuid4(),
+            )
+        ),
+        admin=acting_admin,
+    )
+
+    assert response.admin_id == target.id
+    assert response.is_active is False
+
+    assert db.commit_count == 1
+    assert db.rollback_count == 0
+
+    assert sync_calls == [
+        "disable"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_enable_admin_syncs_cloudflare_only_after_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = FakeDatabaseSession()
+
+    acting_admin = build_admin(
+        role=AdminRole.SUPER_ADMIN,
+    )
+    acting_admin.id = uuid4()
+
+    target = build_admin(
+        role=AdminRole.ADMIN,
+        is_active=False,
+    )
+    target.id = uuid4()
+    target.disabled_at = utcnow()
+
+    async def fake_enable_admin(
+        session,
+        *,
+        target_admin_id,
+        acting_admin,
+        **kwargs,
+    ):
+        del kwargs
+
+        assert session is db
+        assert target_admin_id == target.id
+        assert acting_admin is not None
+        assert db.commit_count == 0
+
+        target.is_active = True
+        target.disabled_at = None
+        target.security_version += 1
+
+        return target
+
+    sync_calls: list[str] = []
+
+    async def fake_sync_admin_access_policy(
+        session,
+    ):
+        assert session is db
+
+        #
+        # Critical ordering invariant:
+        # local activation commits before Cloudflare is touched.
+        #
+        assert db.commit_count == 1
+        assert target.is_active is True
+
+        sync_calls.append(
+            "enable"
+        )
+
+        return [
+            target.email
+        ]
+
+    monkeypatch.setattr(
+        admin_team_route,
+        "enable_admin",
+        fake_enable_admin,
+    )
+    monkeypatch.setattr(
+        admin_team_route,
+        "sync_admin_access_policy",
+        fake_sync_admin_access_policy,
+    )
+
+    response = await admin_team_route.enable_team_admin(
+        admin_id=target.id,
+        http_request=build_direct_admin_request(),
+        session=db,
+        current=SimpleNamespace(
+            session=SimpleNamespace(
+                id=uuid4(),
+            )
+        ),
+        admin=acting_admin,
+    )
+
+    assert response.admin_id == target.id
+    assert response.is_active is True
+    assert response.disabled_at is None
+
+    assert db.commit_count == 1
+    assert db.rollback_count == 0
+
+    assert sync_calls == [
+        "enable"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_cloudflare_sync_failure_does_not_rollback_committed_disable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Once local disable succeeds, Cloudflare is a best-effort
+    downstream synchronization target.
+
+    Even an unexpected integration exception must not cause a
+    second-phase rollback attempt or turn the committed disable
+    into an API failure.
+    """
+
+    db = FakeDatabaseSession()
+
+    acting_admin = build_admin(
+        role=AdminRole.SUPER_ADMIN,
+    )
+    acting_admin.id = uuid4()
+
+    target = build_admin(
+        role=AdminRole.ADMIN,
+    )
+    target.id = uuid4()
+
+    async def fake_disable_admin(
+        session,
+        *,
+        target_admin_id,
+        acting_admin,
+        **kwargs,
+    ):
+        del kwargs
+        del acting_admin
+
+        assert session is db
+        assert target_admin_id == target.id
+
+        target.is_active = False
+        target.disabled_at = utcnow()
+        target.security_version += 1
+
+        return target
+
+    async def failing_sync_admin_access_policy(
+        session,
+    ):
+        assert session is db
+        assert db.commit_count == 1
+
+        raise RuntimeError(
+            "simulated Cloudflare outage"
+        )
+
+    monkeypatch.setattr(
+        admin_team_route,
+        "disable_admin",
+        fake_disable_admin,
+    )
+    monkeypatch.setattr(
+        admin_team_route,
+        "sync_admin_access_policy",
+        failing_sync_admin_access_policy,
+    )
+
+    response = await admin_team_route.disable_team_admin(
+        admin_id=target.id,
+        http_request=build_direct_admin_request(),
+        session=db,
+        current=SimpleNamespace(
+            session=SimpleNamespace(
+                id=uuid4(),
+            )
+        ),
+        admin=acting_admin,
+    )
+
+    assert response.admin_id == target.id
+    assert response.is_active is False
+
+    #
+    # The authoritative local state committed exactly once.
+    # No rollback is attempted after downstream sync failure.
+    #
+    assert db.commit_count == 1
+    assert db.rollback_count == 0
+

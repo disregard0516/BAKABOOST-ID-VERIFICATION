@@ -28,6 +28,7 @@ import {
   approveCase,
   rejectCase,
   requestMoreInfo,
+  stepUpAdminSession,
 } from "@/lib/admin-api";
 
 
@@ -114,6 +115,8 @@ export function DecisionPanel({
 
 
     try {
+      await stepUpAdminSession();
+
       if (
         decision ===
         "approve"

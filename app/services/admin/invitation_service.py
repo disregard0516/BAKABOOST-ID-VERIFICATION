@@ -532,6 +532,136 @@ async def create_admin_invitation(
 
 
 # ============================================================
+# INVITATION RESEND / TOKEN ROTATION
+# ============================================================
+
+
+async def resend_admin_invitation(
+    session: AsyncSession,
+    *,
+    invitation_id: uuid.UUID,
+    acting_admin: Admin,
+    ip_address: str | None = None,
+    admin_session_id: uuid.UUID | None = None,
+    request_id: str | None = None,
+    user_agent: str | None = None,
+) -> CreatedAdminInvitation:
+    """
+    Rotate the secret for an existing unused administrator
+    invitation so a fresh invitation email can be sent.
+
+    SECURITY CONTRACT
+    -----------------
+    - only an active SUPER_ADMIN may resend
+    - invitation row is locked before mutation
+    - accepted invitations cannot be resent
+    - revoked invitations cannot be resent
+    - expired invitations cannot be resent
+    - raw invitation token is never persisted or audited
+    - previous invitation URL becomes invalid after commit
+    - service deliberately does NOT commit
+
+    The caller owns the transaction and must roll back if
+    delivery of the new invitation email fails.
+    """
+
+    _require_active_super_admin(
+        acting_admin
+    )
+
+    result = await session.execute(
+        select(
+            AdminInvitation
+        )
+        .where(
+            AdminInvitation.id
+            == invitation_id
+        )
+        .with_for_update()
+    )
+
+    invitation = (
+        result.scalar_one_or_none()
+    )
+
+    if invitation is None:
+        raise AdminInvitationNotFoundError(
+            "Administrator invitation not found."
+        )
+
+    if invitation.accepted_at is not None:
+        raise AdminInvitationAlreadyAcceptedError(
+            "Accepted administrator invitations cannot be resent."
+        )
+
+    if invitation.revoked_at is not None:
+        raise AdminInvitationRevokedError(
+            "Revoked administrator invitations cannot be resent."
+        )
+
+    now = utc_now()
+
+    if invitation.expires_at <= now:
+        raise AdminInvitationExpiredError(
+            "Expired administrator invitations cannot be resent."
+        )
+
+    raw_token = generate_secure_token(
+        _ADMIN_INVITATION_TOKEN_BYTES
+    )
+
+    invitation.token_hash = sha256_token(
+        raw_token
+    )
+    invitation.updated_at = now
+
+    await session.flush()
+
+    await record_audit_event(
+        session,
+        actor_type=ActorType.ADMIN.value,
+        actor_id=str(
+            acting_admin.id
+        ),
+        action=AuditAction.ADMIN_INVITED.value,
+        metadata={
+            "event": (
+                "admin_invitation_resent"
+            ),
+            "invitation_id": str(
+                invitation.id
+            ),
+            "invited_email": (
+                invitation.email
+            ),
+            "invited_role": (
+                invitation.role.value
+            ),
+            "expires_at": (
+                invitation.expires_at
+                .isoformat()
+            ),
+            "token_rotated": True,
+        },
+        ip_address=ip_address,
+        admin_session_id=(
+            admin_session_id
+        ),
+        request_id=request_id,
+        user_agent=user_agent,
+        outcome="success",
+    )
+
+    await session.flush()
+
+    return CreatedAdminInvitation(
+        invitation=invitation,
+        raw_token=raw_token,
+    )
+
+
+
+# ============================================================
 # INVITATION REVOCATION
 # ============================================================
 

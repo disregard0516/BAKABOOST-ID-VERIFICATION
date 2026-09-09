@@ -69,6 +69,11 @@ export function EvidenceUploadCard({
       null,
     );
 
+  const cameraInputRef =
+    useRef<HTMLInputElement | null>(
+      null,
+    );
+
   const videoRef =
     useRef<HTMLVideoElement | null>(
       null,
@@ -518,8 +523,8 @@ export function EvidenceUploadCard({
     const blob =
       await canvasToBlob(
         canvas,
-        "image/jpeg",
-        0.92,
+        "image/png",
+        1,
       );
 
     if (!blob) {
@@ -533,6 +538,9 @@ export function EvidenceUploadCard({
     const filename =
       buildCameraFilename(
         type,
+      ).replace(
+        /\.[^.]+$/,
+        ".png",
       );
 
     const file =
@@ -541,7 +549,7 @@ export function EvidenceUploadCard({
         filename,
         {
           type:
-            "image/jpeg",
+            "image/png",
 
           lastModified:
             Date.now(),
@@ -910,6 +918,27 @@ export function EvidenceUploadCard({
                       "starting"
                   }
                   onClick={() => {
+                    if (
+                      shouldUseNativeCameraCapture() &&
+                      cameraInputRef.current
+                    ) {
+                      setError(
+                        null,
+                      );
+
+                      setCameraError(
+                        null,
+                      );
+
+                      clearPreview();
+                      stopCamera();
+
+                      cameraInputRef.current
+                        .click();
+
+                      return;
+                    }
+
                     void openCamera();
                   }}
                   className="
@@ -1096,6 +1125,31 @@ export function EvidenceUploadCard({
           </div>
         </div>
       </div>
+
+      <input
+        ref={
+          cameraInputRef
+        }
+        type="file"
+        hidden
+        accept="image/*"
+        capture="environment"
+        onChange={(event) => {
+          const file =
+            event.target
+              .files?.[0];
+
+          if (file) {
+            void handleFile(
+              file,
+            );
+          }
+
+          event.currentTarget
+            .value =
+            "";
+        }}
+      />
 
       <input
         ref={
@@ -1686,7 +1740,23 @@ function buildCameraFilename(
         "-",
       );
 
-  return `${type}-${timestamp}.jpg`;
+  return `${type}-${timestamp}.png`;
+}
+
+function shouldUseNativeCameraCapture(): boolean {
+  if (
+    typeof window === "undefined" ||
+    typeof navigator === "undefined"
+  ) {
+    return false;
+  }
+
+  return (
+    navigator.maxTouchPoints > 0 &&
+    window.matchMedia(
+      "(pointer: coarse)",
+    ).matches
+  );
 }
 
 function getCameraErrorMessage(

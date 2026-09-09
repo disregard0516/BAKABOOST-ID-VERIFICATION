@@ -23,10 +23,6 @@ from app.schemas.submission import (
 from app.services.audit.service import (
     record_audit_event,
 )
-from app.services.retention.service import (
-    get_default_retention_policy,
-    schedule_evidence_retention,
-)
 from app.services.verification.state_machine import (
     require_transition,
 )
@@ -174,30 +170,15 @@ async def create_submission(
         #
         evidence.expires_at = None
 
-    #
-    # Resolve the retention policy once.
-    #
-    # Previously this lookup and another
-    # evidence loop were nested inside the
-    # attachment loop, causing retention to
-    # be scheduled repeatedly.
-    #
-    retention_policy = (
-        await get_default_retention_policy(
-            session
-        )
-    )
-
-    if retention_policy is not None:
-        for evidence in evidence_objects:
-            await schedule_evidence_retention(
-                session,
-                evidence=evidence,
-                retention_days=(
-                    retention_policy
-                    .raw_evidence_retention_days
-                ),
-            )
+        #
+        # Submitted evidence is retained
+        # indefinitely by default.
+        #
+        # Physical deletion remains available
+        # through the protected manual admin
+        # evidence-deletion workflow.
+        #
+        evidence.deletion_due_at = None
 
     previous_status = (
         verification_request.status

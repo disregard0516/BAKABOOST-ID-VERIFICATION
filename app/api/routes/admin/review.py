@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated
 from uuid import UUID
 
@@ -5,9 +6,11 @@ from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
+    Query,
     Request,
     status,
 )
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import (
@@ -28,9 +31,14 @@ from app.schemas.review import (
     ReviewDetailResponse,
     SubmissionReviewView,
 )
+from app.services.access.grant_service import (
+    issue_access_grant,
+)
 from app.services.admin.evidence_review_service import (
     EvidenceReviewError,
     create_evidence_preview_url,
+    get_previewable_evidence,
+    verify_evidence_preview_token,
 )
 from app.services.admin.review_service import (
     CaseClaimError,
@@ -39,6 +47,10 @@ from app.services.admin.review_service import (
     get_review_detail,
     record_decision,
 )
+from app.services.storage.s3 import open_private_object
+
+logger = logging.getLogger(__name__)
+
 
 router = APIRouter(
     prefix="/verification-requests",
@@ -237,6 +249,74 @@ async def preview_evidence(
         ),
     )
 
+@router.get(
+    "/evidence/{evidence_id}/content",
+    response_class=StreamingResponse,
+)
+async def stream_evidence_content(
+    evidence_id: UUID,
+    token: Annotated[str, Query(min_length=1)],
+    session: Annotated[
+        AsyncSession,
+        Depends(get_db_session),
+    ],
+    admin: Annotated[
+        Admin,
+        Depends(
+            require_permission(
+                Permission.EVIDENCE_VIEW
+            )
+        ),
+    ],
+) -> StreamingResponse:
+    try:
+        verify_evidence_preview_token(
+            token=token,
+            evidence_id=evidence_id,
+            admin_id=admin.id,
+        )
+
+        evidence = await get_previewable_evidence(
+            session,
+            evidence_id=evidence_id,
+        )
+
+        stored_object = open_private_object(
+            object_key=evidence.object_key,
+        )
+    except EvidenceReviewError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        )
+
+    body = stored_object["Body"]
+
+    def stream_body():
+        try:
+            while chunk := body.read(64 * 1024):
+                yield chunk
+        finally:
+            body.close()
+
+    headers = {
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+        "Content-Disposition": "inline",
+    }
+
+    if evidence.size_bytes > 0:
+        headers["Content-Length"] = str(
+            evidence.size_bytes
+        )
+
+    return StreamingResponse(
+        stream_body(),
+        media_type=evidence.content_type,
+        headers=headers,
+    )
+
+
 async def _perform_decision(
     *,
     request_id: UUID,
@@ -267,6 +347,26 @@ async def _perform_decision(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         )
+
+    if target_status == VerificationStatus.APPROVED:
+        try:
+            await issue_access_grant(
+                session,
+                request_id=verification_request.id,
+                admin_id=admin.id,
+                ip_address=(
+                    http_request.client.host
+                    if http_request.client
+                    else None
+                ),
+            )
+        except Exception:
+            logger.exception(
+                "Automatic Discord access grant failed after "
+                "verification approval for request %s; "
+                "the committed approval remains valid.",
+                verification_request.id,
+            )
 
     return DecisionResponse(
         request_id=verification_request.id,

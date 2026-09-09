@@ -20,6 +20,7 @@ dependencies = [
     "PyJWT[crypto]",
     "certifi",
     "redis[hiredis]",
+    "discord.py>=2.6,<3",
 ]
 
 [project.optional-dependencies]

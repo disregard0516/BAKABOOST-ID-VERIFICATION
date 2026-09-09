@@ -21,11 +21,13 @@ import type {
 
 interface VerificationShellProps {
   currentStep: VerificationStep;
+  currentStepComplete?: boolean;
   children: ReactNode;
 }
 
 export function VerificationShell({
   currentStep,
+  currentStepComplete = false,
   children,
 }: VerificationShellProps) {
   const currentYear =
@@ -118,6 +120,9 @@ export function VerificationShell({
             <VerificationProgress
               currentStep={
                 currentStep
+              }
+              currentStepComplete={
+                currentStepComplete
               }
             />
           </div>
@@ -319,9 +324,9 @@ export function VerificationShell({
                 sm:text-right
               "
             >
-              Your information is handled
-              according to the stated retention
-              and privacy policy.
+              Submitted evidence is retained
+              according to the stated privacy
+              and manual deletion policy.
             </span>
           </div>
         </div>

@@ -18,6 +18,33 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     backend_url: str = "http://localhost:8000"
 
+    # --------------------------------------------------------
+    # Transactional email
+    # --------------------------------------------------------
+
+    # Production administrator invitations are delivered
+    # through a transactional email provider. Secrets belong
+    # in the protected runtime environment, never source.
+    email_provider: str = "resend"
+
+    # Resend API credential. Keep empty in source/development
+    # unless real delivery is intentionally configured.
+    resend_api_key: str = ""
+
+    # Verified sender identity, for example:
+    # BAKABOOST <security@scanly.link>
+    admin_invitation_from_email: str = ""
+
+    # Optional Reply-To address.
+    admin_invitation_reply_to: str = ""
+
+    # Public frontend route that receives the one-time
+    # invitation token. The URL is constructed server-side
+    # from frontend_url so the frontend never invents it.
+    admin_invitation_accept_path: str = (
+        "/admin/invitation"
+    )
+
     discord_client_id: str = ""
     discord_client_secret: str = ""
     discord_redirect_uri: str = (
@@ -54,7 +81,11 @@ class Settings(BaseSettings):
     # This binds assertions to the specific BAKABOOST
     # administrator Access application.
     cloudflare_access_audience: str = ""
-
+ 
+    # Dedicated Cloudflare Access Application Audience (AUD)
+    # used only for administrator invitation enrollment.
+    cloudflare_access_enrollment_audience: str = ""
+    
     # Dedicated Cloudflare Access Application Audience (AUD)
     # used only for administrator step-up authentication.
     #
@@ -63,6 +94,16 @@ class Settings(BaseSettings):
     # administrator Access audience must never be accepted as
     # step-up assurance.
     cloudflare_access_step_up_audience: str = ""
+
+    # Cloudflare API policy synchronization used to keep the
+    # edge allow-list aligned with active local administrators.
+    cloudflare_account_id: str = ""
+    cloudflare_admin_app_id: str = ""
+    cloudflare_admin_policy_id: str = ""
+
+    # Secret API token with the minimum required permission:
+    # Account -> Access: Apps and Policies -> Edit.
+    cloudflare_api_token: str = ""
 
     # --------------------------------------------------------
     # Administrator session security
@@ -152,6 +193,7 @@ class Settings(BaseSettings):
 
     discord_guild_id: str = ""
     discord_invite_channel_id: str = ""
+    discord_verified_role_id: str = ""
 
     discord_invite_max_age_seconds: int = 900
     discord_invite_max_uses: int = 1

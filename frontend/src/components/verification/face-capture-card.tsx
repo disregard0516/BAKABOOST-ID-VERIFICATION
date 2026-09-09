@@ -60,9 +60,6 @@ interface LivenessStep {
   durationMs: number;
 }
 
-const SELFIE_CAPTURE_QUALITY =
-  0.92;
-
 export function FaceCaptureCard({
   type,
   title,
@@ -419,40 +416,141 @@ export function FaceCaptureCard({
 
         try {
           let stream:
-            MediaStream;
+            MediaStream | null =
+            null;
 
-          try {
-            stream =
-              await navigator.mediaDevices
-                .getUserMedia({
-                  audio: false,
+          let lastCameraError:
+            unknown =
+            null;
 
-                  video: {
-                    facingMode: {
-                      ideal:
-                        "user",
-                    },
+          const cameraAttempts:
+            MediaStreamConstraints[] = [
+              {
+                audio: false,
 
-                    width: {
-                      ideal:
-                        1280,
-                    },
-
-                    height: {
-                      ideal:
-                        1280,
-                    },
+                video: {
+                  facingMode: {
+                    ideal:
+                      "user",
                   },
-                });
-          } catch {
-            stream =
-              await navigator.mediaDevices
-                .getUserMedia({
-                  audio: false,
 
-                  video:
-                    true,
-                });
+                  width: {
+                    ideal:
+                      1280,
+                  },
+
+                  height: {
+                    ideal:
+                      1280,
+                  },
+                },
+              },
+
+              {
+                audio: false,
+
+                video:
+                  true,
+              },
+            ];
+
+          for (
+            const constraints
+            of cameraAttempts
+          ) {
+            try {
+              stream =
+                await navigator.mediaDevices
+                  .getUserMedia(
+                    constraints,
+                  );
+
+              break;
+            } catch (cause) {
+              lastCameraError =
+                cause;
+
+              if (
+                isCameraAccessBlockingError(
+                  cause,
+                )
+              ) {
+                throw cause;
+              }
+            }
+          }
+
+          if (!stream) {
+            try {
+              const devices =
+                await navigator.mediaDevices
+                  .enumerateDevices();
+
+              const cameras =
+                devices.filter(
+                  (device) =>
+                    device.kind ===
+                      "videoinput" &&
+                    Boolean(
+                      device.deviceId,
+                    ),
+                );
+
+              for (
+                const camera
+                of cameras
+              ) {
+                try {
+                  stream =
+                    await navigator.mediaDevices
+                      .getUserMedia({
+                        audio: false,
+
+                        video: {
+                          deviceId: {
+                            exact:
+                              camera.deviceId,
+                          },
+                        },
+                      });
+
+                  break;
+                } catch (cause) {
+                  lastCameraError =
+                    cause;
+
+                  if (
+                    isCameraAccessBlockingError(
+                      cause,
+                    )
+                  ) {
+                    throw cause;
+                  }
+                }
+              }
+            } catch (cause) {
+              lastCameraError =
+                cause;
+
+              if (
+                isCameraAccessBlockingError(
+                  cause,
+                )
+              ) {
+                throw cause;
+              }
+            }
+          }
+
+          if (!stream) {
+            if (lastCameraError) {
+              throw lastCameraError;
+            }
+
+            throw new DOMException(
+              "No usable camera was found.",
+              "NotFoundError",
+            );
           }
 
           streamRef.current =
@@ -574,8 +672,8 @@ export function FaceCaptureCard({
         const blob =
           await canvasToBlob(
             canvas,
-            "image/jpeg",
-            SELFIE_CAPTURE_QUALITY,
+            "image/png",
+            1,
           );
 
         if (!blob) {
@@ -590,10 +688,13 @@ export function FaceCaptureCard({
           [blob],
           buildFaceFilename(
             type,
+          ).replace(
+            /\.[^.]+$/,
+            ".png",
           ),
           {
             type:
-              "image/jpeg",
+              "image/png",
 
             lastModified:
               Date.now(),
@@ -2142,6 +2243,24 @@ function buildFaceFilename(
       );
 
   return `${type}-${timestamp}.jpg`;
+}
+
+function isCameraAccessBlockingError(
+  cause: unknown,
+): boolean {
+  if (
+    !(cause instanceof DOMException)
+  ) {
+    return false;
+  }
+
+  return [
+    "NotAllowedError",
+    "PermissionDeniedError",
+    "SecurityError",
+  ].includes(
+    cause.name,
+  );
 }
 
 function getCameraErrorMessage(

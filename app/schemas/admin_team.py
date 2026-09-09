@@ -122,18 +122,15 @@ class CreatedAdminInvitationResponse(
     AdminTeamSchema
 ):
     """
-    The raw invitation token is intentionally exposed only
-    in this one creation response.
+    Response returned after an administrator invitation has
+    been created and its one-time credential has been sent
+    through the configured email provider.
 
-    It must not appear in list/detail responses, persistence,
-    audit metadata or logs.
+    The raw invitation token must never be returned to the
+    administrator browser.
     """
 
     invitation: AdminInvitationResponse
-
-    invitation_token: str = Field(
-        min_length=32,
-    )
 
 
 class RevokeAdminInvitationRequest(

@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -25,6 +27,19 @@ from app.middleware.security_headers import (
 from app.services.readiness import (
     get_readiness_status,
 )
+from app.services.security.redis import (
+    close_redis_client,
+)
+
+
+@asynccontextmanager
+async def application_lifespan(
+    application: FastAPI,
+):
+    try:
+        yield
+    finally:
+        await close_redis_client()
 
 
 def create_application() -> FastAPI:
@@ -36,6 +51,7 @@ def create_application() -> FastAPI:
 
     application = FastAPI(
         title=settings.app_name,
+        lifespan=application_lifespan,
         description=(
             "Secure pre-Discord identity "
             "verification backend. Verification "

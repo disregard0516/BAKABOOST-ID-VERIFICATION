@@ -111,9 +111,9 @@ export function ApprovedAccess() {
             new Date(),
           );
 
-          return Boolean(
-            result.access_available &&
-            result.discord_invite_url,
+          return (
+            result.status !==
+            "not_issued"
           );
         } catch {
           setError(
@@ -277,10 +277,17 @@ export function ApprovedAccess() {
       access.discord_invite_url,
     );
 
+  const accessComplete =
+    access?.status ===
+    "consumed";
+
 
   return (
     <VerificationShell
       currentStep="access"
+      currentStepComplete={
+        accessComplete
+      }
     >
       <section
         className="
@@ -364,9 +371,11 @@ export function ApprovedAccess() {
                 sm:text-[42px]
               "
             >
-              {accessReady
-                ? "Your Discord access is ready"
-                : "Your verification is complete"}
+              {accessComplete
+                ? "Your verification is complete"
+                : accessReady
+                  ? "Your Discord access is ready"
+                  : "Preparing your Discord access"}
             </h1>
 
 
@@ -381,7 +390,9 @@ export function ApprovedAccess() {
                 sm:text-sm
               "
             >
-              Your verification was approved for the Discord account bound to this request. Approval and server entry are handled as separate steps.
+              {accessComplete
+                ? "Your verification is complete and Discord access has been granted to the verified account bound to this request."
+                : "Your verification has been approved. Secure Discord access is being prepared for the verified account bound to this request."}
             </p>
           </div>
         </div>

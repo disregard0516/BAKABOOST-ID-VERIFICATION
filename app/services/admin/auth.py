@@ -193,6 +193,31 @@ def _get_cloudflare_access_audience() -> str:
     return audience
 
 
+def _get_cloudflare_access_enrollment_audience() -> str:
+    """
+    Return the dedicated administrator enrollment
+    Access application audience.
+
+    Assertions for this audience are accepted only for
+    invitation enrollment and must not establish ordinary
+    administrator or step-up assurance.
+    """
+
+    audience = (
+        settings
+        .cloudflare_access_enrollment_audience
+        .strip()
+    )
+
+    if not audience:
+        raise AdminAuthenticationError(
+            "Administrator enrollment authentication "
+            "audience is not configured."
+        )
+
+    return audience
+
+
 def _get_cloudflare_access_step_up_audience() -> str:
     """
     Return the dedicated administrator step-up Access
@@ -510,6 +535,61 @@ def decode_admin_token(
                 normalized_token,
                 audience=(
                     _get_cloudflare_access_audience()
+                ),
+            )
+        )
+
+    return _identity_from_claims(
+        claims
+    )
+
+
+def decode_admin_enrollment_token(
+    raw_token: str,
+) -> AdminIdentity:
+    """
+    Validate an administrator invitation-enrollment identity.
+
+    Production/staging use the dedicated Cloudflare Access
+    enrollment application audience.
+
+    This token is valid only for invitation enrollment and
+    must not be treated as an ordinary administrator session
+    or MFA step-up assertion.
+    """
+
+    if not isinstance(
+        raw_token,
+        str,
+    ):
+        raise AdminAuthenticationError(
+            "Invalid administrator "
+            "authentication."
+        )
+
+    normalized_token = (
+        raw_token.strip()
+    )
+
+    if not normalized_token:
+        raise AdminAuthenticationError(
+            "Invalid administrator "
+            "authentication."
+        )
+
+    if _development_admin_auth_enabled():
+        claims = (
+            _decode_development_admin_token(
+                normalized_token
+            )
+        )
+
+    else:
+        claims = (
+            _decode_cloudflare_access_token(
+                normalized_token,
+                audience=(
+                    _get_cloudflare_access_enrollment_audience()
                 ),
             )
         )

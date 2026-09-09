@@ -15,6 +15,7 @@ import {
 
 import {
   getEvidencePreview,
+  stepUpAdminSession,
 } from "@/lib/admin-api";
 
 import {
@@ -56,23 +57,18 @@ export function EvidenceReviewCard({
     );
 
     try {
+      await stepUpAdminSession();
+
       const result =
         await getEvidencePreview(
           evidence.evidence_id,
         );
 
-      const previewWindow =
-        window.open(
-          result.signed_url,
-          "_blank",
-          "noopener,noreferrer",
-        );
-
-      if (!previewWindow) {
-        setError(
-          "Your browser blocked the preview window. Allow pop-ups for this site and try again.",
-        );
-      }
+      window.open(
+        result.signed_url,
+        "_blank",
+        "noopener,noreferrer",
+      );
     } catch (cause) {
       setError(
         cause instanceof Error

@@ -405,21 +405,36 @@ export function AdminShell({
             icon={Users}
             label="Team & Access"
             description="Team management"
-            disabled
+            active={pathname === "/admin/team"}
+            onClick={() => {
+              navigate(
+                "/admin/team",
+              );
+            }}
           />
 
           <AdminNavItem
             icon={Activity}
             label="Audit Activity"
             description="Security activity"
-            disabled
+            active={pathname === "/admin/audit"}
+            onClick={() => {
+              navigate(
+                "/admin/audit",
+              );
+            }}
           />
 
           <AdminNavItem
             icon={Settings}
             label="Settings"
             description="Workspace settings"
-            disabled
+            active={pathname === "/admin/settings"}
+            onClick={() => {
+              navigate(
+                "/admin/settings",
+              );
+            }}
           />
 
 
@@ -736,39 +751,94 @@ export function AdminShell({
             <div
               className="
                 mt-8
-                space-y-1.5
+                min-h-0
+                flex-1
+                overflow-y-auto
+                pr-1
               "
             >
-              <MobileAdminLink
-                icon={LayoutDashboard}
-                label="Overview"
-                active={overviewActive}
-                onClick={() => {
-                  navigate("/admin");
-                }}
+              <div className="space-y-1.5">
+                <MobileAdminLink
+                  icon={LayoutDashboard}
+                  label="Overview"
+                  active={overviewActive}
+                  onClick={() => {
+                    navigate("/admin");
+                  }}
+                />
+
+                <MobileAdminLink
+                  icon={FileCheck2}
+                  label="Verification Queue"
+                  active={queueActive}
+                  onClick={() => {
+                    navigate(
+                      "/admin/verification-queue",
+                    );
+                  }}
+                />
+
+                <MobileAdminLink
+                  icon={Plus}
+                  label="Create Request"
+                  active={createRequestActive}
+                  onClick={() => {
+                    navigate(
+                      "/admin/verification-requests/new",
+                    );
+                  }}
+                />
+              </div>
+
+              <div
+                className="
+                  mx-2
+                  my-5
+                  h-px
+                  bg-white/[0.055]
+                "
               />
 
-              <MobileAdminLink
-                icon={FileCheck2}
-                label="Verification Queue"
-                active={queueActive}
-                onClick={() => {
-                  navigate(
-                    "/admin/verification-queue",
-                  );
-                }}
-              />
+              <div className="space-y-1.5">
+                <MobileAdminLink
+                  icon={Users}
+                  label="Team & Access"
+                  active={
+                    pathname === "/admin/team"
+                  }
+                  onClick={() => {
+                    navigate(
+                      "/admin/team",
+                    );
+                  }}
+                />
 
-              <MobileAdminLink
-                icon={Plus}
-                label="Create Request"
-                active={createRequestActive}
-                onClick={() => {
-                  navigate(
-                    "/admin/verification-requests/new",
-                  );
-                }}
-              />
+                <MobileAdminLink
+                  icon={Activity}
+                  label="Audit Activity"
+                  active={
+                    pathname === "/admin/audit"
+                  }
+                  onClick={() => {
+                    navigate(
+                      "/admin/audit",
+                    );
+                  }}
+                />
+
+                <MobileAdminLink
+                  icon={Settings}
+                  label="Settings"
+                  active={
+                    pathname === "/admin/settings"
+                  }
+                  onClick={() => {
+                    navigate(
+                      "/admin/settings",
+                    );
+                  }}
+                />
+              </div>
             </div>
 
 

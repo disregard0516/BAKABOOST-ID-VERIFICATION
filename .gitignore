@@ -46,3 +46,8 @@ logs/
 .local/
 
 .local/
+
+# Local edit / recovery backups
+*.before-*
+*.bak.*
+*.pre-*

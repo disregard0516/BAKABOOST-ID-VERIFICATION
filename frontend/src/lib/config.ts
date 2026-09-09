@@ -5,7 +5,7 @@ const API_BASE_URL =
 export const appConfig = {
   name:
     process.env.NEXT_PUBLIC_APP_NAME ??
-    "ID Verify",
+    "BAKABOOST Id Verification - Scan Securely.",
 
   apiBaseUrl: API_BASE_URL,
 

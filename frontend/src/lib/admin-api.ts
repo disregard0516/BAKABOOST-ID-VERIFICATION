@@ -30,6 +30,28 @@ import type {
   ReviewerListResponse,
 } from "@/types/reviewer";
 
+import type {
+  AcceptedAdminInvitationResponse,
+  AdminAccountStateResponse,
+  AdminInvitationListResponse,
+  AdminRole,
+  AdminRoleChangeResponse,
+  AdminSessionRevocationResponse,
+  AdminTeamListResponse,
+  CreatedAdminInvitationResponse,
+  CreateAdminInvitationPayload,
+} from "@/types/admin-team";
+
+import type {
+  AdminAuditActivityQuery,
+  AdminAuditActivityResponse,
+} from "@/types/admin-audit";
+
+import type {
+  AdminSettingsResponse,
+} from "@/types/admin-settings";
+
+
 
 /* ============================================================
    CONFIGURATION
@@ -675,6 +697,194 @@ async function adminFetch<T>(
 
 
 /* ============================================================
+   CURRENT ADMINISTRATOR
+============================================================ */
+
+export interface CurrentAdmin {
+  id: string;
+  email: string;
+  display_name: string;
+  role: AdminRole;
+}
+
+
+export interface CurrentAdminSession {
+  authenticated: true;
+  admin: CurrentAdmin;
+  expires_at: string;
+}
+
+
+/**
+ * Return the currently authenticated BAKABOOST administrator.
+ *
+ * The backend intentionally exposes only the safe administrator
+ * representation: id, email, display name and role.
+ *
+ * restoreAdminSession() refreshes the in-memory CSRF token before
+ * this request returns, so Team & Access can safely perform later
+ * state-changing operations through adminFetch().
+ */
+export async function getCurrentAdminSession():
+  Promise<CurrentAdminSession> {
+  await ensureAdminSession();
+
+  let response: Response;
+
+  try {
+    response = await fetch(
+      getApiUrl(
+        ADMIN_SESSION_PATH,
+      ),
+      {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+
+        headers: {
+          Accept: "application/json",
+        },
+      },
+    );
+  } catch {
+    throw new AdminApiError(
+      "Unable to reach the BAKABOOST administrator API.",
+      0,
+    );
+  }
+
+  if (!response.ok) {
+    const message =
+      await getResponseErrorMessage(
+        response,
+        "Unable to read administrator session.",
+      );
+
+    if (response.status === 401) {
+      clearAdminSessionState();
+      signalAdminSessionExpired();
+    }
+
+    throw new AdminApiError(
+      message,
+      response.status,
+    );
+  }
+
+  let payload: AdminSessionResponse;
+
+  try {
+    payload =
+      (await response.json()) as
+        AdminSessionResponse;
+  } catch {
+    throw new AdminApiError(
+      "Administrator session service returned an invalid response.",
+      500,
+    );
+  }
+
+  const csrfToken =
+    extractCsrfToken(payload);
+
+  if (!csrfToken) {
+    clearAdminSessionState();
+
+    throw new AdminApiError(
+      "Administrator request verification could not be refreshed.",
+      500,
+    );
+  }
+
+  const admin = payload.admin;
+
+  if (
+    payload.authenticated !== true ||
+    typeof admin !== "object" ||
+    admin === null
+  ) {
+    throw new AdminApiError(
+      "Administrator session returned an invalid identity.",
+      500,
+    );
+  }
+
+  const candidate =
+    admin as Record<string, unknown>;
+
+  const role =
+    candidate.role;
+
+  if (
+    typeof candidate.id !== "string" ||
+    typeof candidate.email !== "string" ||
+    typeof candidate.display_name !== "string" ||
+    (
+      role !== "reviewer" &&
+      role !== "admin" &&
+      role !== "super_admin"
+    ) ||
+    typeof payload.expires_at !== "string"
+  ) {
+    throw new AdminApiError(
+      "Administrator session returned an invalid identity.",
+      500,
+    );
+  }
+
+  adminCsrfToken = csrfToken;
+
+  return {
+    authenticated: true,
+
+    admin: {
+      id: candidate.id,
+      email: candidate.email,
+      display_name:
+        candidate.display_name,
+      role,
+    },
+
+    expires_at:
+      payload.expires_at,
+  };
+}
+
+
+/* ============================================================
+   SENSITIVE ADMIN SESSION VALIDATION
+============================================================ */
+
+/**
+ * Confirm that the current BAKABOOST administrator session is
+ * valid before a sensitive administrator operation.
+ *
+ * Administrator authentication is established at the
+ * Cloudflare Access protected admin boundary and represented
+ * inside BAKABOOST by the server-managed HttpOnly session.
+ *
+ * Sensitive API requests continue to use the existing CSRF
+ * credential and backend RBAC enforcement. A separate
+ * Cloudflare MFA/biometric step-up ceremony is intentionally
+ * not required for each sensitive action.
+ *
+ * Keep this exported helper so all existing sensitive-action
+ * callers share one centralized authentication boundary.
+ */
+export async function stepUpAdminSession():
+  Promise<void> {
+  await ensureAdminSession();
+
+  if (!adminCsrfToken) {
+    throw new AdminApiError(
+      "Administrator request verification is unavailable.",
+      403,
+    );
+  }
+}
+
+
+/* ============================================================
    ADMIN LOGOUT
 ============================================================ */
 
@@ -1091,5 +1301,361 @@ export async function getReviewers():
   Promise<ReviewerListResponse> {
   return adminFetch<ReviewerListResponse>(
     "/admin/reviewers",
+  );
+}
+
+
+/* ============================================================
+   TEAM & ACCESS
+============================================================ */
+
+/**
+ * Return administrator accounts visible to an administrator
+ * with ADMIN_MANAGE permission.
+ */
+export async function getAdminTeam():
+  Promise<AdminTeamListResponse> {
+  return adminFetch<AdminTeamListResponse>(
+    "/admin/team",
+  );
+}
+
+
+/**
+ * Return administrator invitations.
+ *
+ * Raw invitation tokens are never returned by this endpoint.
+ */
+export async function getAdminInvitations():
+  Promise<AdminInvitationListResponse> {
+  return adminFetch<AdminInvitationListResponse>(
+    "/admin/team/invitations",
+  );
+}
+
+
+/**
+ * Create a new administrator invitation.
+ *
+ * This is a sensitive operation. The caller confirms the
+ * current administrator session through stepUpAdminSession().
+ *
+ *
+ * The one-time invitation credential is delivered only to the
+ * invited email address. It is never returned to the admin browser.
+ */
+export async function createAdminInvitation(
+  payload: CreateAdminInvitationPayload,
+): Promise<CreatedAdminInvitationResponse> {
+  return adminFetch<CreatedAdminInvitationResponse>(
+    "/admin/team/invitations",
+    {
+      method: "POST",
+
+      body: JSON.stringify(
+        payload,
+      ),
+    },
+  );
+}
+
+
+/**
+ * Accept a one-time administrator invitation.
+ *
+ * This request intentionally bypasses adminFetch().
+ *
+ * A first-time invitee does not have a local BAKABOOST
+ * administrator account or session until this invitation has
+ * been accepted. In production the request still crosses the
+ * Cloudflare Access protected origin boundary, where FastAPI
+ * receives and validates Cf-Access-Jwt-Assertion.
+ *
+ * The raw invitation token is sent only in the request body.
+ * It is never persisted in browser storage.
+ */
+export async function acceptAdminInvitation(
+  invitationToken: string,
+): Promise<AcceptedAdminInvitationResponse> {
+  const normalizedToken =
+    invitationToken.trim();
+
+  if (
+    normalizedToken.length < 32 ||
+    normalizedToken.length > 1024
+  ) {
+    throw new AdminApiError(
+      "Administrator invitation is invalid.",
+      400,
+    );
+  }
+
+  let response: Response;
+
+  try {
+    response = await fetch(
+      getApiUrl(
+        "/admin/team/invitations/accept",
+      ),
+      {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+
+        body: JSON.stringify({
+          invitation_token:
+            normalizedToken,
+        }),
+      },
+    );
+  } catch {
+    throw new AdminApiError(
+      "Unable to reach the BAKABOOST administrator API.",
+      0,
+    );
+  }
+
+  if (!response.ok) {
+    const message =
+      await getResponseErrorMessage(
+        response,
+        "Administrator invitation could not be accepted.",
+      );
+
+    throw new AdminApiError(
+      message,
+      response.status,
+    );
+  }
+
+  try {
+    return (
+      await response.json()
+    ) as AcceptedAdminInvitationResponse;
+  } catch {
+    throw new AdminApiError(
+      "Administrator invitation service returned an invalid response.",
+      500,
+    );
+  }
+}
+
+
+/**
+ * Resend an existing unused administrator invitation.
+ *
+ * This rotates the invitation token and sends a fresh email.
+ * The raw invitation token is never returned to the browser.
+ *
+ * This is a sensitive operation and requires current
+ * administrator step-up assurance.
+ */
+export async function resendAdminInvitation(
+  invitationId: string,
+): Promise<CreatedAdminInvitationResponse> {
+  return adminFetch<CreatedAdminInvitationResponse>(
+    `/admin/team/invitations/${invitationId}/resend`,
+    {
+      method: "POST",
+    },
+  );
+}
+
+
+
+/**
+ * Revoke an unused administrator invitation.
+ *
+ * This is a sensitive operation and requires current
+ * administrator step-up assurance.
+ */
+export async function revokeAdminInvitation(
+  invitationId: string,
+  reason?: string,
+): Promise<void> {
+  await adminFetch<void>(
+    `/admin/team/invitations/${invitationId}/revoke`,
+    {
+      method: "POST",
+
+      body: JSON.stringify({
+        reason:
+          reason?.trim() || null,
+      }),
+    },
+  );
+}
+
+
+/**
+ * Change an administrator role.
+ *
+ * Backend invariants prevent removal of the final active
+ * Super Admin.
+ */
+export async function changeAdminRole(
+  adminId: string,
+  role: AdminRole,
+): Promise<AdminRoleChangeResponse> {
+  return adminFetch<AdminRoleChangeResponse>(
+    `/admin/team/${adminId}/role`,
+    {
+      method: "POST",
+
+      body: JSON.stringify({
+        role,
+      }),
+    },
+  );
+}
+
+
+/**
+ * Disable an administrator account.
+ *
+ * Existing sessions are invalidated by the backend security
+ * service as part of the account mutation.
+ */
+export async function disableTeamAdmin(
+  adminId: string,
+): Promise<AdminAccountStateResponse> {
+  return adminFetch<AdminAccountStateResponse>(
+    `/admin/team/${adminId}/disable`,
+    {
+      method: "POST",
+    },
+  );
+}
+
+
+/**
+ * Re-enable a disabled administrator account.
+ */
+export async function enableTeamAdmin(
+  adminId: string,
+): Promise<AdminAccountStateResponse> {
+  return adminFetch<AdminAccountStateResponse>(
+    `/admin/team/${adminId}/enable`,
+    {
+      method: "POST",
+    },
+  );
+}
+
+
+/**
+ * Force invalidation of an administrator's existing sessions.
+ */
+export async function revokeTeamAdminSessions(
+  adminId: string,
+): Promise<AdminSessionRevocationResponse> {
+  return adminFetch<AdminSessionRevocationResponse>(
+    `/admin/team/${adminId}/revoke-sessions`,
+    {
+      method: "POST",
+    },
+  );
+}
+
+
+/* ============================================================
+   AUDIT ACTIVITY
+============================================================ */
+
+/**
+ * Return global administrator-visible security audit activity.
+ *
+ * All filtering and pagination is performed server-side.
+ */
+export async function getAdminAuditActivity(
+  query: AdminAuditActivityQuery = {},
+): Promise<AdminAuditActivityResponse> {
+  const params =
+    new URLSearchParams();
+
+  if (query.page !== undefined) {
+    params.set(
+      "page",
+      String(query.page),
+    );
+  }
+
+  if (query.page_size !== undefined) {
+    params.set(
+      "page_size",
+      String(query.page_size),
+    );
+  }
+
+  if (query.action?.trim()) {
+    params.set(
+      "action",
+      query.action.trim(),
+    );
+  }
+
+  if (query.outcome?.trim()) {
+    params.set(
+      "outcome",
+      query.outcome.trim(),
+    );
+  }
+
+  if (query.actor_type?.trim()) {
+    params.set(
+      "actor_type",
+      query.actor_type.trim(),
+    );
+  }
+
+  if (query.actor_id?.trim()) {
+    params.set(
+      "actor_id",
+      query.actor_id.trim(),
+    );
+  }
+
+  if (
+    query.verification_request_id
+      ?.trim()
+  ) {
+    params.set(
+      "verification_request_id",
+      query.verification_request_id.trim(),
+    );
+  }
+
+  if (query.request_id?.trim()) {
+    params.set(
+      "request_id",
+      query.request_id.trim(),
+    );
+  }
+
+  const suffix =
+    params.size > 0
+      ? `?${params.toString()}`
+      : "";
+
+  return adminFetch<AdminAuditActivityResponse>(
+    `/admin/audit${suffix}`,
+  );
+}
+
+
+
+/* ============================================================
+   SETTINGS
+============================================================ */
+
+export async function getAdminSettings():
+  Promise<AdminSettingsResponse> {
+  return adminFetch<AdminSettingsResponse>(
+    "/admin/settings",
   );
 }

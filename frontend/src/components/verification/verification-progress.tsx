@@ -16,10 +16,12 @@ import type {
 
 interface VerificationProgressProps {
   currentStep: VerificationStep;
+  currentStepComplete?: boolean;
 }
 
 export function VerificationProgress({
   currentStep,
+  currentStepComplete = false,
 }: VerificationProgressProps) {
   const steps =
     appConfig.verificationSteps;
@@ -72,10 +74,15 @@ export function VerificationProgress({
         {steps.map(
           (step, index) => {
             const complete =
-              index < currentIndex;
+              index < currentIndex ||
+              (
+                index === currentIndex &&
+                currentStepComplete
+              );
 
             const active =
-              index === currentIndex;
+              index === currentIndex &&
+              !currentStepComplete;
 
             return (
               <div

@@ -174,6 +174,9 @@ class AuditAction(StrEnum):
     ACCESS_REVOKED = "access.revoked"
     ACCESS_CONSUMED = "access.consumed"
 
+    ACCESS_DM_SENT = "access.dm_sent"
+    ACCESS_DM_FAILED = "access.dm_failed"
+
     # ========================================================
     # ADMIN NOTES
     # ========================================================

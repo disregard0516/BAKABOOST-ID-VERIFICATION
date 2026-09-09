@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 from uuid import UUID
 
@@ -43,7 +44,10 @@ from app.schemas.admin_team import (
 )
 from app.services.admin.auth import (
     AdminAuthenticationError,
-    decode_admin_token,
+    decode_admin_enrollment_token,
+)
+from app.services.admin.cloudflare_access_policy import (
+    sync_admin_access_policy,
 )
 from app.services.admin.invitation_service import (
     AdminInvitationAlreadyAcceptedError,
@@ -57,6 +61,7 @@ from app.services.admin.invitation_service import (
     accept_admin_invitation,
     create_admin_invitation,
     list_admin_invitations,
+    resend_admin_invitation,
     revoke_admin_invitation,
 )
 from app.services.admin.team_service import (
@@ -70,11 +75,52 @@ from app.services.admin.team_service import (
     list_admin_team,
     revoke_admin_access_sessions,
 )
+from app.services.email.admin_invitation_email import (
+    AdminInvitationEmailError,
+    send_admin_invitation_email,
+)
+
+logger = logging.getLogger(__name__)
+
 
 router = APIRouter(
     prefix="/team",
     tags=["Admin Team & Access"],
 )
+
+
+async def _sync_admin_access_policy_best_effort(
+    session: AsyncSession,
+    *,
+    reason: str,
+) -> None:
+    """
+    Keep the Cloudflare edge allow-list aligned after local
+    administrator state has already committed.
+
+    Cloudflare is deliberately outside the local database
+    transaction boundary. A temporary edge-sync failure must
+    never roll back or misrepresent a successfully committed
+    invitation/account-state change.
+    """
+
+    try:
+        await sync_admin_access_policy(
+            session
+        )
+    except Exception:
+        #
+        # This integration runs only after the authoritative
+        # local administrator state has committed. Cloudflare
+        # outages, malformed responses, or unexpected client
+        # errors must therefore never turn a successful local
+        # state change into an HTTP failure or rollback attempt.
+        #
+        logger.exception(
+            "Cloudflare administrator Access policy sync "
+            "failed after committed local change: %s",
+            reason,
+        )
 
 
 # ============================================================
@@ -505,6 +551,27 @@ async def create_invitation(
             )
         )
 
+        #
+        # Delivery is part of the invitation-creation
+        # transaction boundary.
+        #
+        # If the provider rejects or cannot deliver the
+        # message, the invitation and its audit event are
+        # rolled back so no usable undelivered invitation
+        # remains in persistent state.
+        #
+        await send_admin_invitation_email(
+            recipient_email=(
+                created.invitation.email
+            ),
+            role=(
+                created.invitation.role.value
+            ),
+            raw_token=(
+                created.raw_token
+            ),
+        )
+
         await session.commit()
 
     except AdminInvitationError as exc:
@@ -518,6 +585,17 @@ async def create_invitation(
             "unreachable"
         )
 
+    except AdminInvitationEmailError:
+        await session.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                "Administrator invitation could not be "
+                "delivered. No invitation was created."
+            ),
+        ) from None
+
     except Exception:
         await session.rollback()
         raise
@@ -526,10 +604,102 @@ async def create_invitation(
         invitation=_invitation_response(
             created.invitation
         ),
-        invitation_token=(
-            created.raw_token
+    )
+
+
+# ============================================================
+# RESEND INVITATION
+# ============================================================
+
+
+@router.post(
+    "/invitations/{invitation_id}/resend",
+    response_model=CreatedAdminInvitationResponse,
+)
+async def resend_invitation(
+    invitation_id: UUID,
+    http_request: Request,
+    session: DatabaseSession,
+    current: CurrentAdminSession,
+    admin: Annotated[
+        Admin,
+        Depends(
+            require_sensitive_permission(
+                Permission.ADMIN_MANAGE
+            )
+        ),
+    ],
+) -> CreatedAdminInvitationResponse:
+    try:
+        resent = await resend_admin_invitation(
+            session,
+            invitation_id=invitation_id,
+            acting_admin=admin,
+            ip_address=_client_ip(
+                http_request
+            ),
+            admin_session_id=(
+                current.session.id
+            ),
+            request_id=_request_id(
+                http_request
+            ),
+            user_agent=_user_agent(
+                http_request
+            ),
+        )
+
+        #
+        # Email delivery and token rotation are one transaction.
+        #
+        # If the provider call fails, rollback restores the
+        # previous token hash so the existing link remains valid.
+        #
+        await send_admin_invitation_email(
+            recipient_email=(
+                resent.invitation.email
+            ),
+            role=(
+                resent.invitation.role.value
+            ),
+            raw_token=resent.raw_token,
+        )
+
+        await session.commit()
+
+    except AdminInvitationError as exc:
+        await session.rollback()
+
+        _raise_invitation_management_error(
+            exc
+        )
+
+        raise AssertionError(
+            "unreachable"
+        )
+
+    except AdminInvitationEmailError:
+        await session.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                "Administrator invitation could not "
+                "be resent. The previous invitation "
+                "remains valid."
+            ),
+        ) from None
+
+    except Exception:
+        await session.rollback()
+        raise
+
+    return CreatedAdminInvitationResponse(
+        invitation=_invitation_response(
+            resent.invitation
         ),
     )
+
 
 
 # ============================================================
@@ -707,7 +877,7 @@ async def accept_invitation(
         # Verify external identity
         # ----------------------------------------------------
 
-        identity = decode_admin_token(
+        identity = decode_admin_enrollment_token(
             raw_assertion
         )
 
@@ -735,6 +905,11 @@ async def accept_invitation(
         )
 
         await session.commit()
+
+        await _sync_admin_access_policy_best_effort(
+            session,
+            reason="admin_invitation_accepted",
+        )
 
     except AdminAuthenticationError as exc:
         await session.rollback()
@@ -909,6 +1084,11 @@ async def disable_team_admin(
 
         await session.commit()
 
+        await _sync_admin_access_policy_best_effort(
+            session,
+            reason="admin_disabled",
+        )
+
     except AdminTeamError as exc:
         await session.rollback()
 
@@ -977,6 +1157,11 @@ async def enable_team_admin(
         )
 
         await session.commit()
+
+        await _sync_admin_access_policy_best_effort(
+            session,
+            reason="admin_enabled",
+        )
 
     except AdminTeamError as exc:
         await session.rollback()
