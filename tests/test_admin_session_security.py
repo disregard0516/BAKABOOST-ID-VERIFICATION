@@ -34,7 +34,7 @@ def build_request() -> Request:
             "headers": [
                 (
                     b"user-agent",
-                    b"BAKABOOST-Test-Agent",
+                    b"SCANLY-Test-Agent",
                 ),
             ],
             "client": (
@@ -441,7 +441,7 @@ async def test_security_denial_receives_request_context(
 
     assert (
         recorded["user_agent"]
-        == "BAKABOOST-Test-Agent"
+        == "SCANLY-Test-Agent"
     )
 
     assert (

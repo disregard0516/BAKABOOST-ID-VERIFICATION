@@ -1,8 +1,8 @@
-# Contributing to BAKABOOST
+# Contributing to SCANLY
 
-Thank you for contributing to BAKABOOST.
+Thank you for contributing to SCANLY.
 
-BAKABOOST is a security-sensitive identity verification and controlled Discord access platform. Changes should prioritize security, correctness, privacy, and maintainability.
+SCANLY is a security-sensitive identity verification and controlled Discord access platform. Changes should prioritize security, correctness, privacy, and maintainability.
 
 ## Development Principles
 
@@ -94,6 +94,6 @@ Confirm:
 
 ## License
 
-Contribution or repository access does not imply permission to redistribute, sublicense, or commercially reuse BAKABOOST.
+Contribution or repository access does not imply permission to redistribute, sublicense, or commercially reuse SCANLY.
 
 Any licensing terms are determined separately by the repository owner.

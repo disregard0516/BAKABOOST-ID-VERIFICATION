@@ -134,7 +134,7 @@ def _build_html(
             margin-bottom:20px;
           "
         >
-          BAKABOOST
+          SCANLY
         </div>
 
         <h1
@@ -154,7 +154,7 @@ def _build_html(
             margin:0 0 18px;
           "
         >
-          You have been invited to join the BAKABOOST
+          You have been invited to join the SCANLY
           administration team with the role
           <strong>{safe_role}</strong>.
         </p>
@@ -235,7 +235,7 @@ async def send_admin_invitation_email(
     payload: dict[str, object] = {
         "from": settings.admin_invitation_from_email.strip(),
         "to": [recipient],
-        "subject": "You are invited to BAKABOOST",
+        "subject": "You are invited to SCANLY",
         "html": _build_html(
             invitation_url=invitation_url,
             role=role,

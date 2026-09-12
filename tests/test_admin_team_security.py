@@ -133,7 +133,7 @@ def build_admin(
         email=(
             f"{uuid4()}@example.test"
         ),
-        display_name="BAKABOOST Test",
+        display_name="SCANLY Test",
         role=role,
         is_active=is_active,
         mfa_enabled=True,

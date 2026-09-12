@@ -364,7 +364,7 @@ function SiteHeader({
               text-[#11112D]
             "
           >
-            BAKABOOST
+            SCANLY
           </span>
         </a>
 
@@ -773,7 +773,7 @@ function HeroSection({
             "
           >
             Complete your private
-            BAKABOOST verification
+            SCANLY verification
             before protected server
             access is released.
             Connect the Discord
@@ -1242,7 +1242,7 @@ function HeroVisual() {
 
           <Image
             src="/images/verification-phone-3d.png"
-            alt="BAKABOOST secure identity verification on a mobile device"
+            alt="SCANLY secure identity verification on a mobile device"
             width={2600}
             height={3200}
             priority
@@ -3468,7 +3468,7 @@ function SiteFooter() {
                   text-[#11112D]
                 "
               >
-                BAKABOOST
+                SCANLY
               </span>
             </div>
 
@@ -3559,7 +3559,7 @@ function SiteFooter() {
           "
         >
           <span>
-            © {new Date().getFullYear()} BAKABOOST.
+            © {new Date().getFullYear()} SCANLY.
             All rights reserved.
           </span>
 
@@ -3754,7 +3754,7 @@ function VerificationHeroLoader() {
             tracking-[-0.03em]
           "
         >
-          BAKABOOST
+          SCANLY
         </div>
 
         <p

@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     resend_api_key: str = ""
 
     # Verified sender identity, for example:
-    # BAKABOOST <security@scanly.link>
+    # SCANLY <security@scanly.link>
     admin_invitation_from_email: str = ""
 
     # Optional Reply-To address.
@@ -71,14 +71,14 @@ class Settings(BaseSettings):
     # --------------------------------------------------------
 
     # Example:
-    # bakaboost.cloudflareaccess.com
+    # scanly.cloudflareaccess.com
     #
     # Store the hostname only. The backend derives the
     # expected issuer and signing-certificate endpoint from it.
     cloudflare_access_team_domain: str = ""
 
     # Cloudflare Access Application Audience (AUD) tag.
-    # This binds assertions to the specific BAKABOOST
+    # This binds assertions to the specific SCANLY
     # administrator Access application.
     cloudflare_access_audience: str = ""
  
@@ -118,23 +118,23 @@ class Settings(BaseSettings):
     # - no Domain attribute
     #
     admin_session_cookie_name: str = (
-        "__Host-bakaboost_admin_session"
+        "__Host-scanly_admin_session"
     )
 
     # Local development runs over plain HTTP, where __Host-
     # cookies cannot be used.
     admin_session_development_cookie_name: str = (
-        "bakaboost_admin_session"
+        "scanly_admin_session"
     )
 
     # Production administrator CSRF cookie.
     admin_csrf_cookie_name: str = (
-        "__Host-bakaboost_admin_csrf"
+        "__Host-scanly_admin_csrf"
     )
 
     # Local-development CSRF cookie.
     admin_csrf_development_cookie_name: str = (
-        "bakaboost_admin_csrf"
+        "scanly_admin_csrf"
     )
 
     admin_csrf_header_name: str = (

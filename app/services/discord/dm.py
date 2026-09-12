@@ -70,7 +70,7 @@ async def send_approval_dm(
             )
 
             message = (
-                "Your BAKABOOST verification has been "
+                "Your SCANLY verification has been "
                 "approved.\n\n"
                 "Use this private access link to enter "
                 "the Discord server:\n"

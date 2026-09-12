@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="frontend/public/images/verification-phone-3d.png" width="320" alt="BAKABOOST ID VERIFICATION Identity Verification" />
+<img src="frontend/public/images/verification-phone-3d.png" width="320" alt="SCANLY ID VERIFICATION Identity Verification" />
 
-# BAKABOOST ID VERIFICATION
+# SCANLY ID VERIFICATION
 
 ### Identity first. Access second.
 
@@ -29,13 +29,13 @@
 
 ---
 
-## What is BAKABOOST ID VERIFICATION?
+## What is SCANLY ID VERIFICATION?
 
-BAKABOOST ID VERIFICATION is a secure identity-verification gate built for protected Discord communities.
+SCANLY ID VERIFICATION is a secure identity-verification gate built for protected Discord communities.
 
 Traditional verification systems often allow somebody to enter a community **before** verification is complete.
 
-BAKABOOST ID VERIFICATION reverses that model.
+SCANLY ID VERIFICATION reverses that model.
 
 > **The applicant remains outside the protected Discord server until verification has been reviewed and approved.**
 
@@ -233,7 +233,7 @@ Grant Consumed
 
 # Admin Console
 
-BAKABOOST ID VERIFICATION contains a separate administrative experience for operating the verification system.
+SCANLY ID VERIFICATION contains a separate administrative experience for operating the verification system.
 
 | Workspace | Responsibility |
 |---|---|
@@ -255,7 +255,7 @@ The application maintains its own RBAC, administrator state, sessions, CSRF prot
 
 # Security Architecture
 
-BAKABOOST ID VERIFICATION follows a defense-in-depth model.
+SCANLY ID VERIFICATION follows a defense-in-depth model.
 
 ### Identity controls
 
@@ -324,7 +324,7 @@ BAKABOOST ID VERIFICATION follows a defense-in-depth model.
 # Repository Structure
 
 ```text
-BAKABOOST ID VERIFICATION/
+SCANLY ID VERIFICATION/
 │
 ├── app/
 │   ├── api/
@@ -476,7 +476,7 @@ Production migrations should always be reviewed before execution.
 flowchart TB
     INTERNET["Internet"]
     EDGE["Cloudflare"]
-    APP["BAKABOOST ID VERIFICATION"]
+    APP["SCANLY ID VERIFICATION"]
     API["FastAPI"]
     DB[("PostgreSQL")]
     CACHE[("Redis")]
@@ -533,7 +533,7 @@ Only evidence required for the intended verification purpose should be collected
 
 # Security Status
 
-BAKABOOST ID VERIFICATION is under active development and security hardening.
+SCANLY ID VERIFICATION is under active development and security hardening.
 
 The repository contains implemented security controls and automated regression coverage, but production security also depends on infrastructure configuration, secret management, operational procedures and deployment-specific validation.
 
@@ -566,7 +566,7 @@ Discord access
 
 <div align="center">
 
-## BAKABOOST ID VERIFICATION
+## SCANLY ID VERIFICATION
 
 ### Identity first. Access second.
 

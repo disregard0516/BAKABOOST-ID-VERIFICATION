@@ -1,6 +1,6 @@
-# BAKABOOST Frontend
+# SCANLY Frontend
 
-The BAKABOOST frontend powers the applicant verification and administrative review experiences.
+The SCANLY frontend powers the applicant verification and administrative review experiences.
 
 ## Stack
 

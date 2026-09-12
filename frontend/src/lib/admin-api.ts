@@ -258,7 +258,7 @@ async function getResponseErrorMessage(
 }
 
 /* ============================================================
-   EXISTING BAKABOOST SESSION
+   EXISTING SCANLY SESSION
 ============================================================ */
 
 async function restoreAdminSession():
@@ -282,13 +282,13 @@ async function restoreAdminSession():
     );
   } catch {
     throw new AdminApiError(
-      "Unable to reach the BAKABOOST administrator API.",
+      "Unable to reach the SCANLY administrator API.",
       0,
     );
   }
 
  /*
-  * 401 is normal when no valid BAKABOOST administrator
+  * 401 is normal when no valid SCANLY administrator
   * session exists yet.
   *
   * If the request is running behind Cloudflare Access,
@@ -343,7 +343,7 @@ async function restoreAdminSession():
 
 
 /* ============================================================
-   CREATE BAKABOOST SESSION
+   CREATE SCANLY SESSION
 ============================================================ */
 
 async function establishAdminSession():
@@ -351,7 +351,7 @@ async function establishAdminSession():
   /*
    * Production:
    *
-   * The browser posts directly to the BAKABOOST API. The
+   * The browser posts directly to the SCANLY API. The
    * request passes through Cloudflare Access, which supplies
    * Cf-Access-Jwt-Assertion at the protected origin boundary.
    *
@@ -391,7 +391,7 @@ async function establishAdminSession():
     );
   } catch {
     throw new AdminApiError(
-      "Unable to establish the BAKABOOST administrator session.",
+      "Unable to establish the SCANLY administrator session.",
       0,
     );
   }
@@ -450,7 +450,7 @@ async function establishAdminSession():
 async function initializeAdminSession():
   Promise<void> {
   /*
-   * First try the existing HttpOnly BAKABOOST session.
+   * First try the existing HttpOnly SCANLY session.
    *
    * This allows page reloads without creating unnecessary
    * duplicate administrator sessions.
@@ -463,7 +463,7 @@ async function initializeAdminSession():
   }
 
   /*
-   * No BAKABOOST session exists.
+   * No SCANLY session exists.
    *
    * Establish a new server-managed session from the external
    * identity already authenticated at the origin boundary.
@@ -612,7 +612,7 @@ async function adminFetch<T>(
     );
   } catch {
     throw new AdminApiError(
-      "Unable to reach the BAKABOOST administrator API.",
+      "Unable to reach the SCANLY administrator API.",
       0,
     );
   }
@@ -716,7 +716,7 @@ export interface CurrentAdminSession {
 
 
 /**
- * Return the currently authenticated BAKABOOST administrator.
+ * Return the currently authenticated SCANLY administrator.
  *
  * The backend intentionally exposes only the safe administrator
  * representation: id, email, display name and role.
@@ -748,7 +748,7 @@ export async function getCurrentAdminSession():
     );
   } catch {
     throw new AdminApiError(
-      "Unable to reach the BAKABOOST administrator API.",
+      "Unable to reach the SCANLY administrator API.",
       0,
     );
   }
@@ -856,12 +856,12 @@ export async function getCurrentAdminSession():
 ============================================================ */
 
 /**
- * Confirm that the current BAKABOOST administrator session is
+ * Confirm that the current SCANLY administrator session is
  * valid before a sensitive administrator operation.
  *
  * Administrator authentication is established at the
  * Cloudflare Access protected admin boundary and represented
- * inside BAKABOOST by the server-managed HttpOnly session.
+ * inside SCANLY by the server-managed HttpOnly session.
  *
  * Sensitive API requests continue to use the existing CSRF
  * credential and backend RBAC enforcement. A separate
@@ -922,7 +922,7 @@ export async function logoutAdminSession():
     );
   } catch {
     throw new AdminApiError(
-      "Unable to reach the BAKABOOST administrator API.",
+      "Unable to reach the SCANLY administrator API.",
       0,
     );
   }
@@ -1365,7 +1365,7 @@ export async function createAdminInvitation(
  *
  * This request intentionally bypasses adminFetch().
  *
- * A first-time invitee does not have a local BAKABOOST
+ * A first-time invitee does not have a local SCANLY
  * administrator account or session until this invitation has
  * been accepted. In production the request still crosses the
  * Cloudflare Access protected origin boundary, where FastAPI
@@ -1415,7 +1415,7 @@ export async function acceptAdminInvitation(
     );
   } catch {
     throw new AdminApiError(
-      "Unable to reach the BAKABOOST administrator API.",
+      "Unable to reach the SCANLY administrator API.",
       0,
     );
   }

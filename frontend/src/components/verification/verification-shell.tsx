@@ -222,7 +222,7 @@ export function VerificationShell({
                     text-black
                   "
                 >
-                  BAKABOOST
+                  SCANLY
                 </span>
               </div>
 
@@ -313,7 +313,7 @@ export function VerificationShell({
             "
           >
             <span>
-              © {currentYear} BAKABOOST.
+              © {currentYear} SCANLY.
               All rights reserved.
             </span>
 

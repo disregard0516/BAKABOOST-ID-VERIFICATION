@@ -798,7 +798,7 @@ async def accept_invitation(
     Cloudflare Access-backed administrator enrollment.
 
     This endpoint intentionally does NOT require an existing
-    BAKABOOST administrator session because the invitee has
+    SCANLY administrator session because the invitee has
     not yet been provisioned locally.
 
     Production authentication requires a cryptographically

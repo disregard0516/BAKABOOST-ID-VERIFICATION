@@ -1,6 +1,6 @@
 # Security Policy
 
-BAKABOOST is a security-sensitive identity verification and controlled Discord access platform.
+SCANLY is a security-sensitive identity verification and controlled Discord access platform.
 
 ## Supported Versions
 
@@ -46,7 +46,7 @@ Avoid actions that could:
 
 ## Security Architecture
 
-BAKABOOST uses multiple security boundaries, including:
+SCANLY uses multiple security boundaries, including:
 
 - Immutable Discord User ID binding
 - OAuth-based identity matching
@@ -81,6 +81,6 @@ Environment-specific secrets must be supplied outside version control.
 
 ## Security Status
 
-BAKABOOST is under active development and security hardening.
+SCANLY is under active development and security hardening.
 
 The project should not be interpreted as independently audited, formally certified, or guaranteed vulnerability-free.

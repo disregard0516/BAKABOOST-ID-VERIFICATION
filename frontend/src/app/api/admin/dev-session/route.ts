@@ -15,7 +15,7 @@ const TOKEN_LIFETIME_SECONDS = 60;
 function isExplicitDevelopmentMode(): boolean {
   return (
     process.env.NODE_ENV === "development" &&
-    process.env.BAKABOOST_DEV_ADMIN_AUTH_ENABLED ===
+    process.env.SCANLY_DEV_ADMIN_AUTH_ENABLED ===
       "true"
   );
 }
@@ -36,7 +36,7 @@ function getRequiredEnvironmentValue(
 
 function getBackendApiBaseUrl(): string {
   const configured =
-    process.env.BAKABOOST_BACKEND_API_BASE_URL?.trim();
+    process.env.SCANLY_BACKEND_API_BASE_URL?.trim();
 
   const value =
     configured || DEFAULT_BACKEND_API_BASE_URL;
@@ -80,7 +80,7 @@ function requestHasTrustedOrigin(
 
 async function createDevelopmentToken(): Promise<string> {
   const secret = getRequiredEnvironmentValue(
-    "BAKABOOST_DEV_ADMIN_AUTH_SECRET",
+    "SCANLY_DEV_ADMIN_AUTH_SECRET",
   );
 
   if (secret.length < 32) {
@@ -90,7 +90,7 @@ async function createDevelopmentToken(): Promise<string> {
   }
 
   const subject = getRequiredEnvironmentValue(
-    "BAKABOOST_DEV_ADMIN_AUTH_SUBJECT",
+    "SCANLY_DEV_ADMIN_AUTH_SUBJECT",
   );
 
   const now = Math.floor(Date.now() / 1000);
@@ -184,7 +184,7 @@ export async function POST(
     });
 
     /*
-     * FastAPI creates the real BAKABOOST HttpOnly
+     * FastAPI creates the real SCANLY HttpOnly
      * administrator session and CSRF cookies.
      *
      * Forward every Set-Cookie header to the browser while

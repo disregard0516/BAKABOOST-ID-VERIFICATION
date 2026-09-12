@@ -29,10 +29,10 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: {
     default:
-      "BAKABOOST Id Verification - Scan Securely.",
+      "SCANLY - Verify Securely & Privately",
 
     template:
-      "%s · BAKABOOST Id Verification - Scan Securely.",
+      "%s · SCANLY - Verify Securely & Privately",
   },
 
   description:

@@ -77,7 +77,7 @@ class FakeAsyncClient:
                 body={
                     "success": True,
                     "result": {
-                        "name": "BAKABOOST Admin Allow",
+                        "name": "SCANLY Admin Allow",
                         "decision": "allow",
                         "include": [],
                         "exclude": [],
@@ -280,7 +280,7 @@ async def test_sync_uses_reusable_policy_endpoint_and_preserves_policy(
     current = {
         "success": True,
         "result": {
-            "name": "BAKABOOST Admin Allow",
+            "name": "SCANLY Admin Allow",
             "decision": "allow",
             "include": [
                 {
@@ -377,7 +377,7 @@ async def test_sync_uses_reusable_policy_endpoint_and_preserves_policy(
     )
 
     assert put_call["json"] == {
-        "name": "BAKABOOST Admin Allow",
+        "name": "SCANLY Admin Allow",
         "decision": "allow",
         "include": [
             {

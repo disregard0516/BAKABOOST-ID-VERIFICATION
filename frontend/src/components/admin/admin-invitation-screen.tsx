@@ -309,7 +309,7 @@ export function AdminInvitationScreen() {
                 tracking-[-0.045em]
               "
             >
-              BAKABOOST
+              SCANLY
             </div>
 
             <div
@@ -456,7 +456,7 @@ export function AdminInvitationScreen() {
             >
               This invitation is bound to the authenticated
               identity that received it. Accepting it activates
-              your assigned BAKABOOST administrator role.
+              your assigned SCANLY administrator role.
             </p>
           </div>
 
@@ -637,7 +637,7 @@ export function AdminInvitationScreen() {
                     text-slate-500
                   "
                 >
-                  Keep this page open while BAKABOOST verifies
+                  Keep this page open while SCANLY verifies
                   and consumes the one-time invitation.
                 </p>
               </div>
@@ -695,7 +695,7 @@ export function AdminInvitationScreen() {
                             text-slate-400
                           "
                         >
-                          Your BAKABOOST account is active as{" "}
+                          Your SCANLY account is active as{" "}
                           <span className="font-semibold text-slate-200">
                             {roleLabel(
                               acceptedInvitation.role,
@@ -822,7 +822,7 @@ export function AdminInvitationScreen() {
                     text-slate-600
                   "
                 >
-                  Ask the BAKABOOST Super Admin to issue a new
+                  Ask the SCANLY Super Admin to issue a new
                   invitation if this link has expired, already
                   been used, or was revoked.
                 </p>
@@ -862,7 +862,7 @@ export function AdminInvitationScreen() {
                 Administrator enrollment is protected by
                 Cloudflare Access, one-time invitation
                 validation, immutable identity binding, and
-                BAKABOOST server-managed sessions.
+                SCANLY server-managed sessions.
               </p>
             </div>
           </div>

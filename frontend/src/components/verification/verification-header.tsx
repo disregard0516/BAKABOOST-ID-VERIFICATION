@@ -92,7 +92,7 @@ export function VerificationHeader() {
                   sm:text-[20px]
                 "
               >
-                BAKABOOST
+                SCANLY
               </div>
 
               <div
