@@ -467,7 +467,7 @@ async def establish_admin_session(
 ) -> dict[str, object]:
     """
     Exchange an externally authenticated administrator
-    identity for a BAKABOOST server-managed session.
+    identity for a SCANLY server-managed session.
 
     Production authentication requires a cryptographically
     validated Cloudflare Access application JWT supplied in
@@ -900,7 +900,7 @@ async def step_up_admin_session(
     ] = None,
 ) -> dict[str, object]:
     """
-    Upgrade an existing BAKABOOST administrator session after
+    Upgrade an existing SCANLY administrator session after
     successful validation of the dedicated Cloudflare Access
     step-up application assertion.
 

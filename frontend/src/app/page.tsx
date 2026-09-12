@@ -128,7 +128,7 @@ export default function HomePage() {
                   aria-hidden="true"
                 />
 
-                BAKABOOST Verification
+                SCANLY Verification
               </div>
 
               {/* Icon */}
@@ -185,7 +185,7 @@ export default function HomePage() {
                   sm:text-[14px]
                 "
               >
-                BAKABOOST uses private verification requests
+                SCANLY uses private verification requests
                 to securely confirm your Discord account and
                 collect the information required for manual
                 administrator review.

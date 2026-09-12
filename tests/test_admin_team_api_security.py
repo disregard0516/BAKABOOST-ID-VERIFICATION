@@ -41,7 +41,7 @@ from app.services.admin.session_service import (
 TEST_ORIGIN = "http://testserver"
 
 TEST_INVITATION_TOKEN = (
-    "bakaboost-test-invitation-token-"
+    "scanly-test-invitation-token-"
     "0123456789abcdef"
 )
 
@@ -230,7 +230,7 @@ def build_admin(
             f"{uuid4()}@example.test"
         ),
         display_name=(
-            "BAKABOOST API Test"
+            "SCANLY API Test"
         ),
         role=role,
         is_active=is_active,
@@ -383,7 +383,7 @@ def test_valid_cloudflare_identity_without_local_admin_is_denied(
 
         valid Cloudflare Access identity
         !=
-        BAKABOOST administrator
+        SCANLY administrator
 
     Successful authentication at Cloudflare Access must never
     automatically provision administrator access.
@@ -672,7 +672,7 @@ def test_successful_acceptance_binds_immutable_cloudflare_subject(
     Email proves that the authenticated invitation recipient
     matches the Super Admin-selected address.
 
-    Future BAKABOOST administrator authentication is bound to
+    Future SCANLY administrator authentication is bound to
     auth_subject, never email.
     """
 
@@ -1049,11 +1049,11 @@ def build_direct_admin_request():
             "headers": [
                 (
                     b"user-agent",
-                    b"bakaboost-test-agent",
+                    b"scanly-test-agent",
                 ),
                 (
                     b"x-request-id",
-                    b"bakaboost-test-request",
+                    b"scanly-test-request",
                 ),
             ],
             "client": (

@@ -314,7 +314,7 @@ export function AdminShell({
                   text-white
                 "
               >
-                BAKABOOST
+                SCANLY
               </div>
 
               <div
@@ -698,7 +698,7 @@ export function AdminShell({
                       text-white
                     "
                   >
-                    BAKABOOST
+                    SCANLY
                   </div>
 
                   <div
@@ -1048,7 +1048,7 @@ export function AdminShell({
                   aria-hidden="true"
                 />
 
-                BAKABOOST administration
+                SCANLY administration
               </div>
 
               <div

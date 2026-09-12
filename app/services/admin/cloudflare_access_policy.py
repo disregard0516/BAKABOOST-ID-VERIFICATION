@@ -81,7 +81,7 @@ async def sync_admin_access_policy(
     session: AsyncSession,
 ) -> list[str]:
     """
-    Synchronize the normal BAKABOOST Admin Cloudflare Access
+    Synchronize the normal SCANLY Admin Cloudflare Access
     allow policy with active local administrator emails.
 
     The local database is authoritative for account activation.
@@ -141,7 +141,7 @@ async def sync_admin_access_policy(
         payload = {
             "name": current.get(
                 "name",
-                "BAKABOOST Admin Allow",
+                "SCANLY Admin Allow",
             ),
             "decision": current.get(
                 "decision",
@@ -213,7 +213,7 @@ async def sync_admin_access_policy(
         mfa_payload = {
             "name": mfa_current.get(
                 "name",
-                "BAKABOOST Admin MFA Enrollment",
+                "SCANLY Admin MFA Enrollment",
             ),
             "decision": mfa_current.get(
                 "decision",

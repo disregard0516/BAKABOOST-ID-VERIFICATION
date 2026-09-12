@@ -38,11 +38,11 @@ TEST_EMAIL = (
 )
 
 NORMAL_AUDIENCE = (
-    "bakaboost-admin-access-audience"
+    "scanly-admin-access-audience"
 )
 
 STEP_UP_AUDIENCE = (
-    "bakaboost-admin-step-up-audience"
+    "scanly-admin-step-up-audience"
 )
 
 
@@ -500,7 +500,7 @@ def test_cloudflare_decoder_enforces_expected_jwt_contract(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     team_domain = (
-        "bakaboost.cloudflareaccess.com"
+        "scanly.cloudflareaccess.com"
     )
 
     audience = (
@@ -674,7 +674,7 @@ def test_cloudflare_non_application_token_is_rejected(
         admin_auth_service,
         "_get_cloudflare_access_team_domain",
         lambda: (
-            "bakaboost.cloudflareaccess.com"
+            "scanly.cloudflareaccess.com"
         ),
     )
 

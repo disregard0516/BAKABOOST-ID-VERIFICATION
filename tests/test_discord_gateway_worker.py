@@ -5,8 +5,8 @@ import discord
 import pytest
 
 from app.services.discord.gateway_worker import (
-    BakaboostDiscordClient,
     DiscordGatewayConfigurationError,
+    ScanlyDiscordClient,
     _load_gateway_configuration,
 )
 
@@ -66,7 +66,7 @@ def test_gateway_configuration_requires_bot_token(
 async def test_unauthorized_join_does_not_assign_or_remove_role(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    client = BakaboostDiscordClient(
+    client = ScanlyDiscordClient(
         guild_id=GUILD_ID,
         verified_role_id=ROLE_ID,
     )
@@ -97,7 +97,7 @@ async def test_unauthorized_join_does_not_assign_or_remove_role(
 async def test_bot_join_is_ignored(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    client = BakaboostDiscordClient(
+    client = ScanlyDiscordClient(
         guild_id=GUILD_ID,
         verified_role_id=ROLE_ID,
     )
@@ -125,7 +125,7 @@ async def test_bot_join_is_ignored(
 async def test_eligible_join_assigns_role_then_consumes_grant(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    client = BakaboostDiscordClient(
+    client = ScanlyDiscordClient(
         guild_id=GUILD_ID,
         verified_role_id=ROLE_ID,
     )
@@ -189,7 +189,7 @@ async def test_eligible_join_assigns_role_then_consumes_grant(
 async def test_failed_final_consumption_removes_new_role(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    client = BakaboostDiscordClient(
+    client = ScanlyDiscordClient(
         guild_id=GUILD_ID,
         verified_role_id=ROLE_ID,
     )
@@ -229,7 +229,7 @@ async def test_failed_final_consumption_removes_new_role(
 async def test_other_guild_is_ignored(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    client = BakaboostDiscordClient(
+    client = ScanlyDiscordClient(
         guild_id=GUILD_ID,
         verified_role_id=ROLE_ID,
     )
@@ -256,7 +256,7 @@ async def test_other_guild_is_ignored(
 async def test_preexisting_verified_role_is_removed_if_consume_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    client = BakaboostDiscordClient(
+    client = ScanlyDiscordClient(
         guild_id=GUILD_ID,
         verified_role_id=ROLE_ID,
     )
@@ -303,7 +303,7 @@ async def test_preexisting_verified_role_is_removed_if_consume_fails(
 async def test_existing_member_gets_role_then_consumes_with_existing_source(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    client = BakaboostDiscordClient(
+    client = ScanlyDiscordClient(
         guild_id=GUILD_ID,
         verified_role_id=ROLE_ID,
     )
@@ -366,7 +366,7 @@ async def test_existing_member_gets_role_then_consumes_with_existing_source(
 async def test_existing_member_role_removed_if_final_consume_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    client = BakaboostDiscordClient(
+    client = ScanlyDiscordClient(
         guild_id=GUILD_ID,
         verified_role_id=ROLE_ID,
     )
@@ -410,7 +410,7 @@ async def test_reconciliation_leaves_nonmember_grant_untouched(
 ) -> None:
     from app.services.discord import gateway_worker
 
-    client = BakaboostDiscordClient(
+    client = ScanlyDiscordClient(
         guild_id=GUILD_ID,
         verified_role_id=ROLE_ID,
     )
@@ -494,7 +494,7 @@ async def test_reconciliation_task_starts_only_once(
 ) -> None:
     from app.services.discord import gateway_worker
 
-    client = BakaboostDiscordClient(
+    client = ScanlyDiscordClient(
         guild_id=GUILD_ID,
         verified_role_id=ROLE_ID,
     )
@@ -531,7 +531,7 @@ async def test_reconciliation_task_starts_only_once(
 
     assert len(created_tasks) == 1
     assert created_tasks[0][1] == (
-        "bakaboost-discord-reconciliation"
+        "scanly-discord-reconciliation"
     )
 
 
@@ -541,7 +541,7 @@ async def test_periodic_reconciliation_processes_existing_member(
 ) -> None:
     from app.services.discord import gateway_worker
 
-    client = BakaboostDiscordClient(
+    client = ScanlyDiscordClient(
         guild_id=GUILD_ID,
         verified_role_id=ROLE_ID,
     )
@@ -612,7 +612,7 @@ async def test_periodic_reconciliation_survives_cycle_failure(
 ) -> None:
     from app.services.discord import gateway_worker
 
-    client = BakaboostDiscordClient(
+    client = ScanlyDiscordClient(
         guild_id=GUILD_ID,
         verified_role_id=ROLE_ID,
     )
@@ -679,7 +679,7 @@ async def test_reconciliation_fetches_member_after_cache_miss(
 ) -> None:
     from app.services.discord import gateway_worker
 
-    client = BakaboostDiscordClient(
+    client = ScanlyDiscordClient(
         guild_id=GUILD_ID,
         verified_role_id=ROLE_ID,
     )

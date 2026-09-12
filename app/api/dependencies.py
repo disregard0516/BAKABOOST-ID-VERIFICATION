@@ -294,7 +294,7 @@ async def get_current_admin_session(
 ) -> ValidatedAdminSession:
     """
     Authenticate an administrator using the server-managed
-    BAKABOOST administrator session.
+    SCANLY administrator session.
 
     External OIDC bearer tokens are not accepted as the final
     authentication boundary for protected administrator
@@ -536,7 +536,7 @@ async def get_sensitive_admin(
 
     Authentication assurance is established when the
     administrator enters the Cloudflare Access protected admin
-    application and BAKABOOST creates a valid server-managed
+    application and SCANLY creates a valid server-managed
     administrator session.
 
     Sensitive operations continue to require:

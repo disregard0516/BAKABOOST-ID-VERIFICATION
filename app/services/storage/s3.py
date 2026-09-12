@@ -66,7 +66,7 @@ def delete_private_object(
     """
     Physically delete one exact private evidence object.
 
-    BAKABOOST production storage uses Cloudflare R2. R2 implements
+    SCANLY production storage uses Cloudflare R2. R2 implements
     the S3 DeleteObject operation but does not implement S3 bucket
     versioning APIs such as GetBucketVersioning.
 

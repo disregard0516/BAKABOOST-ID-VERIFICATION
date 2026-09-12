@@ -127,7 +127,7 @@ export function AdminLoginScreen() {
                 text-white
               "
             >
-              BAKABOOST
+              SCANLY
             </div>
 
             <div
@@ -321,7 +321,7 @@ export function AdminLoginScreen() {
                     text-slate-400
                   "
                 >
-                  Manage BAKABOOST verification requests,
+                  Manage SCANLY verification requests,
                   inspect submitted evidence, review account
                   identity and control access after a final
                   administrator decision.
@@ -496,7 +496,7 @@ export function AdminLoginScreen() {
                     text-violet-400
                   "
                 >
-                  BAKABOOST Admin
+                  SCANLY Admin
                 </div>
 
                 <h1
@@ -529,7 +529,7 @@ export function AdminLoginScreen() {
                 >
                   Administrator access is protected by
                   Cloudflare Access and restricted to approved
-                  identities. Continue to enter the BAKABOOST
+                  identities. Continue to enter the SCANLY
                   verification workspace.
                 </p>
               </div>
@@ -602,7 +602,7 @@ export function AdminLoginScreen() {
                 />
 
                 <span className="relative">
-                  Continue to BAKABOOST
+                  Continue to SCANLY
                 </span>
 
                 <ArrowRight
@@ -713,7 +713,7 @@ export function AdminLoginScreen() {
                   text-slate-600
                 "
               >
-                BAKABOOST Identity Verification
+                SCANLY Identity Verification
 
                 <span
                   className="

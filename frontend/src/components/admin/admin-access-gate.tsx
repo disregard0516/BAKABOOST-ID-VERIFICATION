@@ -236,7 +236,7 @@ function AdminSecurityCheckpoint({
             text-violet-400
           "
         >
-          BAKABOOST Security
+          SCANLY Security
         </div>
 
         <h1
@@ -265,7 +265,7 @@ function AdminSecurityCheckpoint({
         >
           {denied
             ? "This administrator session cannot access the requested workspace."
-            : "BAKABOOST is validating your protected administrator session before loading sensitive verification data."}
+            : "SCANLY is validating your protected administrator session before loading sensitive verification data."}
         </p>
 
         {!denied ? (

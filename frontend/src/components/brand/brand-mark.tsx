@@ -39,7 +39,7 @@ export function BrandMark() {
             text-[#171522]
           "
         >
-          BAKABOOST VERIFY
+          SCANLY VERIFY
         </div>
 
         <div

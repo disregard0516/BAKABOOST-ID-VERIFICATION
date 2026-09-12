@@ -14,7 +14,7 @@ from app.services.access.grant_service import (
     list_issued_access_grant_discord_user_ids,
 )
 
-logger = logging.getLogger("bakaboost.discord.gateway")
+logger = logging.getLogger("scanly.discord.gateway")
 
 RECONCILIATION_INTERVAL_SECONDS = 10.0
 
@@ -71,7 +71,7 @@ def _load_gateway_configuration() -> tuple[str, int, int]:
     return token, guild_id, verified_role_id
 
 
-class BakaboostDiscordClient(discord.Client):
+class ScanlyDiscordClient(discord.Client):
     def __init__(
         self,
         *,
@@ -129,7 +129,7 @@ class BakaboostDiscordClient(discord.Client):
             return
 
         logger.info(
-            "BAKABOOST Discord enforcement ready for guild %s "
+            "SCANLY Discord enforcement ready for guild %s "
             "with verified role %s.",
             guild.id,
             role.id,
@@ -151,7 +151,7 @@ class BakaboostDiscordClient(discord.Client):
 
         self._reconciliation_task = asyncio.create_task(
             self._reconciliation_loop(),
-            name="bakaboost-discord-reconciliation",
+            name="scanly-discord-reconciliation",
         )
 
     async def _reconciliation_loop(self) -> None:
@@ -236,7 +236,7 @@ class BakaboostDiscordClient(discord.Client):
         if grant_id is None:
             logger.warning(
                 "Discord user %s joined guild %s without an "
-                "eligible BAKABOOST access grant.",
+                "eligible SCANLY access grant.",
                 member.id,
                 member.guild.id,
             )
@@ -268,7 +268,7 @@ class BakaboostDiscordClient(discord.Client):
                 await member.add_roles(
                     role,
                     reason=(
-                        "BAKABOOST approved identity "
+                        "SCANLY approved identity "
                         "verification"
                     ),
                 )
@@ -403,7 +403,7 @@ class BakaboostDiscordClient(discord.Client):
                 await member.add_roles(
                     role,
                     reason=(
-                        "BAKABOOST approved identity "
+                        "SCANLY approved identity "
                         "verification"
                     ),
                 )
@@ -511,7 +511,7 @@ class BakaboostDiscordClient(discord.Client):
             await member.remove_roles(
                 role,
                 reason=(
-                    "BAKABOOST access grant could not be "
+                    "SCANLY access grant could not be "
                     "finalized"
                 ),
             )
@@ -553,7 +553,7 @@ def main() -> None:
         _load_gateway_configuration()
     )
 
-    client = BakaboostDiscordClient(
+    client = ScanlyDiscordClient(
         guild_id=guild_id,
         verified_role_id=verified_role_id,
     )

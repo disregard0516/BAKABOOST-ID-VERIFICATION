@@ -58,22 +58,22 @@ def configure_valid_production(
     monkeypatch.setattr(
         settings,
         "cloudflare_access_team_domain",
-        "bakaboost.cloudflareaccess.com",
+        "scanly.cloudflareaccess.com",
     )
     monkeypatch.setattr(
         settings,
         "cloudflare_access_audience",
-        "bakaboost-admin-access-audience",
+        "scanly-admin-access-audience",
     )
     monkeypatch.setattr(
         settings,
         "cloudflare_access_step_up_audience",
-        "bakaboost-admin-step-up-audience",
+        "scanly-admin-step-up-audience",
     )
     monkeypatch.setattr(
         settings,
         "cloudflare_access_enrollment_audience",
-        "bakaboost-admin-enrollment-audience",
+        "scanly-admin-enrollment-audience",
     )
     monkeypatch.setattr(
         settings,
@@ -225,11 +225,11 @@ def test_production_requires_cloudflare_access_team_domain(
     "value",
     [
         "example.com",
-        "https://bakaboost.cloudflareaccess.com",
-        "bakaboost.cloudflareaccess.com/path",
-        "bakaboost.cloudflareaccess.com:443",
-        "bakaboost.cloudflareaccess.com?test=1",
-        "bakaboost.cloudflareaccess.com#fragment",
+        "https://scanly.cloudflareaccess.com",
+        "scanly.cloudflareaccess.com/path",
+        "scanly.cloudflareaccess.com:443",
+        "scanly.cloudflareaccess.com?test=1",
+        "scanly.cloudflareaccess.com#fragment",
     ],
 )
 def test_production_rejects_invalid_cloudflare_access_team_domain(

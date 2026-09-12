@@ -97,7 +97,7 @@ def build_request() -> Request:
             "headers": [
                 (
                     b"user-agent",
-                    b"BAKABOOST-Step-Up-Test",
+                    b"SCANLY-Step-Up-Test",
                 ),
             ],
             "client": (

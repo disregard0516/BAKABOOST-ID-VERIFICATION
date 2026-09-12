@@ -672,7 +672,7 @@ async def get_admin_for_identity(
     explicitly provisioned local administrator.
 
     A valid Cloudflare Access identity is not automatically a
-    BAKABOOST administrator.
+    SCANLY administrator.
     """
 
     result = await session.execute(

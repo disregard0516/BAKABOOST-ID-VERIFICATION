@@ -141,7 +141,7 @@ def validate_runtime_security() -> None:
    # Cloudflare Access is the external administrator
    # authentication boundary.
    #
-   # BAKABOOST will cryptographically validate the Access
+   # SCANLY will cryptographically validate the Access
    # application JWT before exchanging it for its own
    # server-managed administrator session.
    #

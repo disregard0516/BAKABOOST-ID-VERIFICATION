@@ -1,5 +1,5 @@
 name: Bug Report
-description: Report a reproducible problem in BAKABOOST
+description: Report a reproducible problem in SCANLY
 title: "[Bug]: "
 labels:
   - bug
